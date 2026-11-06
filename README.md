@@ -119,15 +119,34 @@ push 到 `main` 或手动 `workflow_dispatch`：
 6. 发 Release，tag 为 `ext-dsh-go-shell-v<version>`；
 7. 用 `sha256sum` 回填 `index.json` 的 `sha256` / `sizeBytes` / `downloadUrl` 并提交回 `main`。
 
-### 关于本仓库 index.json 里的空 sha256
+### 关于 index.json 里的 sha256
 
-初始手写的 `index.json` 里 `"sha256": ""`、`"sizeBytes": 0` 是**占位**：哈希只有真正编出 `.dshx`
-之后才知道。第一次成功的 CI 会把它们填上并提交回 `main`。在此之前，市场端应该把空哈希当成
-「未校验」，不要当成「校验通过」。
+手写的初版 `index.json` 里 `"sha256": ""`、`"sizeBytes": 0` 是**占位**：哈希只有真正编出
+`.dshx` 之后才知道。第一次成功的 CI 已经把它们回填并提交回 `main` 了
+（`6453155c…cfad4e`，32123 字节）。市场端仍应把**空哈希当成「未校验」**而不是「校验通过」——
+回填永远不会发生在第一次构建之前。
 
-## 已知不确定的地方（诚实清单）
+## 构建状态与已知不确定的地方（诚实清单）
 
-这条流水线**没有在本地验证过**（本机没有 JDK/Android SDK），以下位置是保守写法，但可能第一次跑就挂：
+**流水线已经跑通**：`Build extensions` 在 2026-11-06 完整跑过一次绿色（编译 → 打包 → 发 Release →
+回填 `index.json`），产物 `dsh-go-shell-1.0.0.dshx` 校验过是合法 zip（`manifest.json` + `classes.dex`，
+dex 魔数 `dex\n038`，里面确实是本扩展的类）。
+
+把第一次跑挂掉的三处修掉之后才绿的，留个记录免得下次踩回去：
+
+- ~~`android-actions/setup-android@v3`~~ 2026-09 起它必定失败（会去装 Google 已移除的 `tools` 包）；
+  改成直接调 `sdkmanager`，只接受许可证 + 装 `platform-tools`；
+- ~~`ShellHost.log(...)`~~ `ShellHost` 是导航句柄，没有 `log`（那在 `DshExtensionHost` 上，
+  只有 `onLoad` 阶段拿得到）。运行期日志走 `:ext-api` 的 `ExtLog`；
+- `compileSdk` 平台名可能是 `android-37` 也可能是 `android-37.1`，按两种都匹配，装不上就交给 AGP。
+
+仍然**没有被验证**的部分（都是运行期，CI 看不出来）：
+
+- 外壳在真机上的实际观感与手势：抽屉、`720dp` 宽屏切换点、深色下的对比度；
+- 宿主 `ShellHost` 目前**没有**「切回默认外壳」的接口，那一条菜单项是空实现（代码里有 TODO）；
+  用户侧的办法是在「插件 → 扩展」里停用本扩展；
+- 宿主没有可观察的「当前页」状态，系统返回键切页时侧栏高亮可能不同步（代码里有 TODO）；
+- 下面这些构建期的常量仍是手抄的，宿主升级时要跟着改：
 
 - `compileSdk = 37` 是照宿主当前配置抄的常量（`extensions/dsh-go-shell/build.gradle.kts`），
   宿主升级时要手改；CI 里平台名按 `android-37` 或 `android-37.1` 两种写法匹配，装不上就交给 AGP；
