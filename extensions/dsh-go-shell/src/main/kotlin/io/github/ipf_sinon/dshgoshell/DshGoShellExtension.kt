@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import me.bmax.apatch.dsh.ext.DshExtension
 import me.bmax.apatch.dsh.ext.DshExtensionHost
+import me.bmax.apatch.dsh.ext.ExtLog
 import me.bmax.apatch.dsh.ext.ExtensionShellTabs
 import me.bmax.apatch.dsh.ext.ExtensionUiRegistry
 import me.bmax.apatch.dsh.ext.RuntimeSummary
@@ -118,6 +119,18 @@ private val NavItems = listOf(
     NavItem(ExtensionShellTabs.SETTINGS, "设置"),
 )
 
+/**
+ * 外壳里的日志出口。
+ *
+ * 为什么不用 host.log(...)：[ShellHost] 是**导航**句柄，只给 navigate/currentTabId/openWebUi
+ * 与运行时状态，没有日志方法（那在 [DshExtensionHost] 上，只在 onLoad 阶段拿得到）。
+ * 外壳运行期要记点什么，走 :ext-api 的 [ExtLog] —— 它的 sink 由宿主指向自己的日志存储。
+ * 前缀写死 ext 名：日志落到 dsh.log 里时能一眼看出是谁干的。
+ */
+private fun goLog(message: String) {
+    ExtLog.log("[ext:dsh-go-shell] " + message)
+}
+
 /** 宽屏阈值：>= 720dp 时抽屉换成常驻侧栏（平板横屏、折叠屏展开都落在这条线上）。 */
 private val WideScreenThreshold = 720.dp
 
@@ -160,18 +173,18 @@ fun DshGoShell(
     // 宿主调用一律 runCatching：外壳跑在宿主进程里，抛出去就是整个 App 崩。
     val select: (String) -> Unit = { tabId ->
         runCatching { host.navigate(tabId) }
-            .onFailure { host.log("切换到 " + tabId + " 失败：" + it.message) }
+            .onFailure { goLog("切换到 " + tabId + " 失败：" + it.message) }
         currentTab = tabId
     }
     val openWebUi: () -> Unit = {
         runCatching { host.openWebUi() }
-            .onFailure { host.log("打开 WebUI 失败：" + it.message) }
+            .onFailure { goLog("打开 WebUI 失败：" + it.message) }
     }
     val backToDefaultShell: () -> Unit = {
         // TODO: 宿主目前**没有**「切回默认外壳」的 API（ShellHost 里没有对应方法）。
         // 与其猜一个不存在的接口，这里先留空：用户仍可以在「插件 → 扩展」里停用本扩展，
         // 停用后 ExtensionUiRegistry 里没有外壳注册，宿主自然回到原生外壳。
-        host.log("切回默认外壳：宿主尚未提供此接口（TODO）")
+        goLog("切回默认外壳：宿主尚未提供此接口（TODO）")
     }
 
     MaterialTheme(colorScheme = DshGoColorScheme) {
