@@ -121,16 +121,19 @@ push 到 `main` 或手动 `workflow_dispatch`：
 
 ### 关于 index.json 里的 sha256
 
-手写的初版 `index.json` 里 `"sha256": ""`、`"sizeBytes": 0` 是**占位**：哈希只有真正编出
-`.dshx` 之后才知道。第一次成功的 CI 已经把它们回填并提交回 `main` 了
-（`6453155c…cfad4e`，32123 字节）。市场端仍应把**空哈希当成「未校验」**而不是「校验通过」——
-回填永远不会发生在第一次构建之前。
+手写的 `index.json` 里 `"sha256": ""`、`"sizeBytes": 0` 是**占位**：哈希只有真正编出
+`.dshx` 之后才知道，所以每次改版本号发新包，这两个字段在 CI 跑完之前都是空的。
+CI 会在 Release 之后用 `sha256sum` 回填并提交回 `main`。市场端应把**空哈希当成「未校验」**
+而不是「校验通过」——回填本来就只能发生在构建之后。
+
+最近一次回填：`dsh-go-shell-1.1.0.dshx`，`46f31b89…b479f`，32773 字节。
 
 ## 构建状态与已知不确定的地方（诚实清单）
 
-**流水线已经跑通**：`Build extensions` 在 2026-11-06 完整跑过一次绿色（编译 → 打包 → 发 Release →
-回填 `index.json`），产物 `dsh-go-shell-1.0.0.dshx` 校验过是合法 zip（`manifest.json` + `classes.dex`，
-dex 魔数 `dex\n038`，里面确实是本扩展的类）。
+**流水线已经跑通**：`Build extensions` 在 2026-11-06 跑过多次绿色（编译 → 打包 → 发 Release →
+回填 `index.json`），最近的 1.1.0 产物 `dsh-go-shell-1.1.0.dshx` 校验过是合法 zip
+（`manifest.json` + `classes.dex`，dex 魔数 `dex\n038`，里面确实是本扩展的类，且 dex 里能查到
+对 `resetToDefaultShell` / `currentTabStates` 的引用 —— 证明新代码真的进了包，而不是只改在源码里）。
 
 把第一次跑挂掉的三处修掉之后才绿的，留个记录免得下次踩回去：
 
