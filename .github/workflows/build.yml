@@ -1,0 +1,191 @@
+name: Build extensions
+
+# push 到 main 或手动触发。
+# 只改了 index.json / README 时不重编：回填提交由 GITHUB_TOKEN 推送，
+# GitHub 本来就不会用它触发新的 run，这里再挡一层。
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'index.json'
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-extensions-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  dsh-go-shell:
+    name: dsh-go-shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # 复合构建（settings.gradle.kts 里的 includeBuild("../DSH-Folk")）要求宿主在同级目录。
+      # 只读 clone，不往宿主仓库写任何东西。
+      - name: 检出宿主 DSH-Folk
+        run: |
+          set -euo pipefail
+          rm -rf ../DSH-Folk
+          git clone --depth 1 https://github.com/IPF-Sinon/DSH-Folk.git ../DSH-Folk
+          echo "宿主 HEAD: $(git -C ../DSH-Folk rev-parse --short HEAD)"
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: 配置 Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # compileSdk 37 / build-tools 36.1.0 与宿主配置保持一致。
+      # 宿主升级时，这里和 extensions/dsh-go-shell/build.gradle.kts 两处要一起改。
+      - name: 安装 Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-37
+            build-tools;36.1.0
+
+      - name: 确认 SDK 组件齐全
+        run: |
+          set -euo pipefail
+          sdkmanager --install "platforms;android-37" "build-tools;36.1.0" > /dev/null
+          ls "$ANDROID_HOME/platforms"
+          ls "$ANDROID_HOME/build-tools"
+
+      - name: 编译扩展（产出 AAR）
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --stacktrace :extensions:dsh-go-shell:assembleRelease
+
+      - name: 打包 .dshx（manifest.json + classes.dex）
+        id: pack
+        run: |
+          set -euo pipefail
+
+          MODULE=extensions/dsh-go-shell
+          NAME=dsh-go-shell
+          VERSION=$(jq -r '.version // empty' "$MODULE/manifest.json")
+          if [ -z "$VERSION" ]; then
+            echo "::error::$MODULE/manifest.json 缺少 version"
+            exit 1
+          fi
+          echo "扩展版本: $VERSION"
+
+          # AGP 的 AAR 输出目录名在 8.x/9.x 都稳定，但仍退化成"取第一个 aar"，
+          # 免得哪天改了布局就整条流水线挂掉。
+          AAR=$(ls "$MODULE"/build/outputs/aar/*.aar 2>/dev/null | head -n 1 || true)
+          if [ -z "$AAR" ]; then
+            echo "::error::没找到 AAR，检查上面的编译日志"
+            exit 1
+          fi
+          echo "AAR: $AAR"
+
+          WORK=$(mktemp -d)
+          unzip -o -q "$AAR" -d "$WORK/aar"
+          JAR="$WORK/aar/classes.jar"
+          if [ ! -f "$JAR" ]; then
+            echo "::error::AAR 里没有 classes.jar"
+            find "$WORK/aar" -maxdepth 2 -type f
+            exit 1
+          fi
+
+          # d8 用 SDK 自带的那个（取版本号最大的 build-tools）
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)
+          ANDROID_JAR="$ANDROID_HOME/platforms/android-37/android.jar"
+          if [ ! -f "$ANDROID_JAR" ]; then
+            ANDROID_JAR=$(ls "$ANDROID_HOME"/platforms/*/android.jar | sort -V | tail -n 1)
+          fi
+          echo "d8: ${BT}d8 / lib: $ANDROID_JAR"
+
+          mkdir -p dist/dex
+          "${BT}d8" --min-api 26 --lib "$ANDROID_JAR" --output dist/dex "$JAR"
+          cp "$MODULE/manifest.json" dist/manifest.json
+          cp dist/dex/classes.dex dist/classes.dex
+
+          # .dshx = 根目录只有 manifest.json + classes.dex 的 zip
+          ( cd dist && zip -q -X "$NAME-$VERSION.dshx" manifest.json classes.dex )
+          cp "dist/$NAME-$VERSION.dshx" "./$NAME-$VERSION.dshx"
+
+          SHA=$(sha256sum "$NAME-$VERSION.dshx" | awk '{print $1}')
+          SIZE=$(stat -c%s "$NAME-$VERSION.dshx")
+          echo "sha256: $SHA ($SIZE bytes)"
+
+          {
+            echo "version=$VERSION"
+            echo "sha=$SHA"
+            echo "size=$SIZE"
+            echo "file=$NAME-$VERSION.dshx"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 发布 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ext-dsh-go-shell-v${{ steps.pack.outputs.version }}
+          name: DSH-Go 外壳 v${{ steps.pack.outputs.version }}
+          body: |
+            DSH-Go 风格外壳扩展 v${{ steps.pack.outputs.version }}
+
+            - 安装：DSH-Folk → 插件 → 扩展 → 扩展市场（或手动解压到 files/extensions/dsh-go-shell/）
+            - 文件：`dsh-go-shell-${{ steps.pack.outputs.version }}.dshx`（zip：manifest.json + classes.dex）
+            - sha256：`${{ steps.pack.outputs.sha }}`
+
+            扩展与宿主同权。任何时候在下面任一路径放一个 `.disable_extensions` 文件即可禁用全部三方扩展：
+            私有目录 `files/extensions/`、`Android/data/me.bmax.apatch/files/`、`/sdcard/Download/DSH-Folk/`。
+          files: ${{ steps.pack.outputs.file }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 回填 index.json
+        env:
+          VERSION: ${{ steps.pack.outputs.version }}
+          SHA: ${{ steps.pack.outputs.sha }}
+          SIZE: ${{ steps.pack.outputs.size }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          URL="https://github.com/$REPO/releases/download/ext-dsh-go-shell-v$VERSION/dsh-go-shell-$VERSION.dshx"
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          # index.json 是人工维护的清单（name/description/caps 等），CI 只回填产物相关的四个字段。
+          if ! jq -e '.extensions | map(.id) | index("dsh-go-shell")' index.json > /dev/null; then
+            echo "::error::index.json 里没有 dsh-go-shell 条目"
+            exit 1
+          fi
+
+          jq --arg v "$VERSION" --arg sha "$SHA" --arg url "$URL" \
+             --arg now "$NOW" --argjson size "$SIZE" '
+            .generatedAt = $now
+            | .extensions |= map(
+                if .id == "dsh-go-shell" then
+                  .version = $v | .sha256 = $sha | .downloadUrl = $url | .sizeBytes = $size
+                else . end
+              )
+          ' index.json > index.json.tmp
+          mv index.json.tmp index.json
+          cat index.json
+
+      - name: 提交 index.json 回 main
+        run: |
+          set -euo pipefail
+          git config user.name "dsh-folk-ci"
+          git config user.email "dsh-folk-ci@users.noreply.github.com"
+          if git diff --quiet -- index.json; then
+            echo "index.json 无变化，跳过提交"
+            exit 0
+          fi
+          git add index.json
+          git commit -m "chore(index): 回填 dsh-go-shell v${{ steps.pack.outputs.version }} 的 sha256 [skip ci]"
+          git push

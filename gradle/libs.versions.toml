@@ -1,0 +1,24 @@
+# 只放扩展需要的东西。
+#
+# 版本号**刻意与宿主 DSH-Folk/gradle/libs.versions.toml 保持一致**：
+# 复合构建里 AGP/Kotlin/Compose 各有一份，但最终产物会被 d8 打进同一个 App 进程，
+# 版本差太远很容易撞上 Kotlin metadata 版本或 Compose runtime 不兼容。
+# 宿主升级时同步改这里（AGP、kotlin、compose-bom、material3 四处）。
+
+[versions]
+agp = "9.3.1"
+kotlin = "2.4.10"
+compose-bom = "2026.09.00"
+material3 = "1.5.0-beta02"
+coroutines = "1.11.0"
+
+[plugins]
+agp-lib = { id = "com.android.library", version.ref = "agp" }
+kotlin-compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+
+[libraries]
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }

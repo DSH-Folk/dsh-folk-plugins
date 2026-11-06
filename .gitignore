@@ -1,0 +1,16 @@
+# Gradle / AGP
+.gradle/
+build/
+local.properties
+captures/
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# 构建产物：.dshx 由 CI 产出并挂到 release 上，不进仓库
+*.dshx
+dist/
+build-aar/

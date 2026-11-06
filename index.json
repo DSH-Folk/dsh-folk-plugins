@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/IPF-Sinon/dsh-folk-plugins",
+  "generatedAt": "2026-11-06T00:00:00Z",
+  "extensions": [
+    {
+      "id": "dsh-go-shell",
+      "name": "DSH-Go 外壳",
+      "version": "1.0.0",
+      "description": "把 App 外壳换成 DSH-Go 风格的抽屉导航与深色外观（容器里的 dsh 不受影响）",
+      "author": "IPF-Sinon",
+      "declaredCaps": ["ui.shell"],
+      "minAppVersion": "2.2.1",
+      "downloadUrl": "https://github.com/IPF-Sinon/dsh-folk-plugins/releases/download/ext-dsh-go-shell-v1.0.0/dsh-go-shell-1.0.0.dshx",
+      "sha256": "",
+      "sizeBytes": 0,
+      "manifestUrl": "https://raw.githubusercontent.com/IPF-Sinon/dsh-folk-plugins/main/extensions/dsh-go-shell/manifest.json"
+    }
+  ]
+}
