@@ -146,15 +146,14 @@ dex 魔数 `dex\n038`，里面确实是本扩展的类）。
 - 宿主 `ShellHost` 目前**没有**「切回默认外壳」的接口，那一条菜单项是空实现（代码里有 TODO）；
   用户侧的办法是在「插件 → 扩展」里停用本扩展；
 - 宿主没有可观察的「当前页」状态，系统返回键切页时侧栏高亮可能不同步（代码里有 TODO）；
-- 下面这些构建期的常量仍是手抄的，宿主升级时要跟着改：
+另外几处是**保守写法**，不是不确定，但值得知道为什么这么写：
 
-- `compileSdk = 37` 是照宿主当前配置抄的常量（`extensions/dsh-go-shell/build.gradle.kts`），
-  宿主升级时要手改；CI 里平台名按 `android-37` 或 `android-37.1` 两种写法匹配，装不上就交给 AGP；
-- AAR 输出路径 `build/outputs/aar/*.aar` 在 AGP 9 上应当不变，脚本里已退化成「取目录里第一个 aar」；
-- `d8` 的路径取 `$ANDROID_HOME/build-tools/*/d8`（版本号最大的一个），`--lib` 用 `android.jar`；
-- SDK 安装**刻意不用** `android-actions/setup-android@v3`：2026-09 起它必定失败（它会去装
-  Google 已移除的 `tools` 包）。这里照抄宿主 CI 的做法直接调 `sdkmanager`，只接受许可证 +
-  装 `platform-tools`，其余让 AGP 自己按需下载；
-- 扩展模块刻意不设 `compileOptions` / `kotlin.jvmTarget`，交给 AGP 默认值，避免 Java 与 Kotlin
-  目标版本不一致报错；
-- `ShellHost` 的「当前页变化」目前没有可观察接口，外壳只能本地维护高亮（代码里有 TODO）。
+- `compileSdk = 37` 与宿主的 `androidCompileSdkVersion` 必须一致（复合构建不会把宿主的
+  `extra` 传进来，只能手抄）；宿主升级时改 `extensions/dsh-go-shell/build.gradle.kts` 一处；
+- AAR 输出路径 `build/outputs/aar/*.aar` 在 AGP 9 上没变，但脚本仍取「目录里第一个 aar」，
+  布局变了也不会直接挂；
+- `d8` 不写死路径，取 `$ANDROID_HOME/build-tools/*/d8` 里版本号最大的那个，`--lib` 用最近的
+  `android.jar`；
+- 扩展模块**刻意不设** `compileOptions` / `kotlin.jvmTarget`：交给 AGP 默认值统一决定，
+  免得 Java 与 Kotlin 两边设成不同版本而报 `Inconsistent JVM-target`。产物会被 d8 转成 dex，
+  class 文件版本不影响运行。
