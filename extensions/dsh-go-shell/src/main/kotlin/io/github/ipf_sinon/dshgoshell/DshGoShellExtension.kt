@@ -62,7 +62,7 @@ class DshGoShellExtension : DshExtension {
 
     override fun onLoad(host: DshExtensionHost) {
         loadedId = host.id
-        host.log("DSH-Go 外壳 v1.0.0 已注册")
+        host.log("DSH-Go 外壳 v1.1.0 已注册")
 
         // 交给宿主的是一段「怎么画外壳」的说明，不是立刻画：
         // 宿主在渲染导航时才会调用它，参数里的 content 才是宿主原有的页面树。
@@ -122,8 +122,9 @@ private val NavItems = listOf(
 /**
  * 外壳里的日志出口。
  *
- * 为什么不用 host.log(...)：[ShellHost] 是**导航**句柄，只给 navigate/currentTabId/openWebUi
- * 与运行时状态，没有日志方法（那在 [DshExtensionHost] 上，只在 onLoad 阶段拿得到）。
+ * 为什么不用 host.log(...)：[ShellHost] 是**导航**句柄（navigate / currentTabId /
+ * currentTabStates / openWebUi / resetToDefaultShell 与运行时状态），没有日志方法
+ * （那在 [DshExtensionHost] 上，只在 onLoad 阶段拿得到）。
  * 外壳运行期要记点什么，走 :ext-api 的 [ExtLog] —— 它的 sink 由宿主指向自己的日志存储。
  * 前缀写死 ext 名：日志落到 dsh.log 里时能一眼看出是谁干的。
  */
@@ -144,16 +145,18 @@ private fun labelOf(tabId: String): String =
  * 页面本体仍然是 [content] —— 那是宿主原来的整棵页面树（主页、终端、插件、设置…），
  * 必须照常渲染，否则「换了个外壳」等于把插件页和设置页弄丢了。
  *
- * 所有导航动作都走 [ShellHost]（navigate / currentTabId / openWebUi），
- * **不要**去摸宿主的 navController：那是 :app 内部实现，扩展拿不到也不该依赖。
+ * 所有导航动作都走 [ShellHost]（navigate / currentTabId / currentTabStates / openWebUi /
+ * resetToDefaultShell），**不要**去摸宿主的 navController：那是 :app 内部实现，
+ * 扩展拿不到也不该依赖。
  */
 @Composable
 fun DshGoShell(
     host: ShellHost,
     content: @Composable (Modifier) -> Unit,
 ) {
-    // 初值从宿主读一次；之后以本地状态为准（宿主没有「当前页变化」的回调）。
-    // TODO: 等宿主提供可观察的当前页状态后，改成收集它，避免用户用系统返回键切页时高亮不同步。
+    // 当前页：先用同步读到的值当初值（第一帧就有正确高亮），之后**完全**以宿主的
+    // currentTabStates() 为准。为什么不能只靠点击时改本地状态：用户按系统返回键、
+    // 或从别处（通知、托盘）跳页时，外壳并不知道，高亮就会停在一个用户其实不在的页上。
     var currentTab by remember {
         mutableStateOf(
             runCatching { host.currentTabId() }.getOrDefault(ExtensionShellTabs.HOME)
@@ -170,10 +173,19 @@ fun DshGoShell(
         runCatching { states.collect { summary = it } }
     }
 
+    // 让高亮跟着宿主的真实当前页走。单独一个 LaunchedEffect：它的生命周期与运行时状态
+    // 那条流互不影响，一条挂掉不该带走另一条。
+    LaunchedEffect(host) {
+        val tabs = runCatching { host.currentTabStates() }.getOrNull() ?: return@LaunchedEffect
+        runCatching { tabs.collect { id -> if (id.isNotEmpty()) currentTab = id } }
+    }
+
     // 宿主调用一律 runCatching：外壳跑在宿主进程里，抛出去就是整个 App 崩。
     val select: (String) -> Unit = { tabId ->
         runCatching { host.navigate(tabId) }
             .onFailure { goLog("切换到 " + tabId + " 失败：" + it.message) }
+        // 点击时先本地改一次，纯粹是不想等一次状态流往返（否则点下去高亮要慢半拍）；
+        // 真正的真相仍然来自 currentTabStates()，它会把这里覆盖成宿主的实际页面。
         currentTab = tabId
     }
     val openWebUi: () -> Unit = {
@@ -181,10 +193,11 @@ fun DshGoShell(
             .onFailure { goLog("打开 WebUI 失败：" + it.message) }
     }
     val backToDefaultShell: () -> Unit = {
-        // TODO: 宿主目前**没有**「切回默认外壳」的 API（ShellHost 里没有对应方法）。
-        // 与其猜一个不存在的接口，这里先留空：用户仍可以在「插件 → 扩展」里停用本扩展，
-        // 停用后 ExtensionUiRegistry 里没有外壳注册，宿主自然回到原生外壳。
-        goLog("切回默认外壳：宿主尚未提供此接口（TODO）")
+        // 走宿主的 resetToDefaultShell()：撤掉当前外壳注册并让界面回到原生外壳。
+        // 外壳**撤不掉自己** —— ExtensionUiRegistry 只是登记表，谁来渲染/重绘归宿主管，
+        // 所以这一下必须交给宿主，自己 unregisterAll 只会留下一个已经画在屏上的空壳。
+        runCatching { host.resetToDefaultShell() }
+            .onFailure { goLog("切回默认外壳失败：" + it.message) }
     }
 
     MaterialTheme(colorScheme = DshGoColorScheme) {
