@@ -129,9 +129,13 @@ push 到 `main` 或手动 `workflow_dispatch`：
 
 这条流水线**没有在本地验证过**（本机没有 JDK/Android SDK），以下位置是保守写法，但可能第一次跑就挂：
 
-- `compileSdk = 37` / `build-tools;36.1.0` 是照宿主当前配置抄的常量，宿主升级时要手改；
+- `compileSdk = 37` 是照宿主当前配置抄的常量（`extensions/dsh-go-shell/build.gradle.kts`），
+  宿主升级时要手改；CI 里平台名按 `android-37` 或 `android-37.1` 两种写法匹配，装不上就交给 AGP；
 - AAR 输出路径 `build/outputs/aar/*.aar` 在 AGP 9 上应当不变，脚本里已退化成「取目录里第一个 aar」；
-- `d8` 的路径取 `$ANDROID_HOME/build-tools/*/d8`（取版本号最大的一个），`--lib` 用 `android.jar`；
+- `d8` 的路径取 `$ANDROID_HOME/build-tools/*/d8`（版本号最大的一个），`--lib` 用 `android.jar`；
+- SDK 安装**刻意不用** `android-actions/setup-android@v3`：2026-09 起它必定失败（它会去装
+  Google 已移除的 `tools` 包）。这里照抄宿主 CI 的做法直接调 `sdkmanager`，只接受许可证 +
+  装 `platform-tools`，其余让 AGP 自己按需下载；
 - 扩展模块刻意不设 `compileOptions` / `kotlin.jvmTarget`，交给 AGP 默认值，避免 Java 与 Kotlin
   目标版本不一致报错；
 - `ShellHost` 的「当前页变化」目前没有可观察接口，外壳只能本地维护高亮（代码里有 TODO）。
