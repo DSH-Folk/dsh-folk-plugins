@@ -1,6 +1,22 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/DSH-Folk/dsh-folk-plugins",
-  "generatedAt": "2026-11-06T19:42:19Z",
-  "extensions": []
+  "generatedAt": "2026-11-19T14:32:50Z",
+  "extensions": [
+    {
+      "id": "dsh-browser-bridge",
+      "name": "浏览器桥",
+      "version": "1.0.0",
+      "description": "让容器里的 dsh 通过 DevTools 协议操作应用内的浏览器：读页面、执行 JS、截屏。启用后会自动打开浏览器模式与 WebView 调试通道。",
+      "author": "DSH-Folk",
+      "declaredCaps": [
+        "host:webview-debug",
+        "host:browser-mode"
+      ],
+      "minApi": 1,
+      "downloadUrl": "",
+      "sha256": "",
+      "sizeBytes": 0
+    }
+  ]
 }
