@@ -96,7 +96,7 @@ jobs:
         run: |
           set -uo pipefail
           SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
-          PLATFORM=$(grep -oE 'compileSdk = [0-9]+' extensions/dsh-go-shell/build.gradle.kts | grep -oE '[0-9]+' | head -1)
+          PLATFORM=$(grep -oE 'compileSdk = [0-9]+' "extensions/${{ matrix.id }}/build.gradle.kts" | grep -oE '[0-9]+' | head -1)
           echo "compileSdk 期望: ${PLATFORM:-未知}"
           if ls "$SDK/platforms" 2>/dev/null | grep -qE "^android-${PLATFORM}(\.|$)"; then
             echo "已有 platforms;android-${PLATFORM}"
