@@ -21,15 +21,12 @@ plugins {
     alias(libs.plugins.agp.lib)
 }
 
-val androidCompileSdkVersion: Int by rootProject.extra
-val androidMinSdkVersion: Int by rootProject.extra
-
 android {
     namespace = "me.bmax.apatch.ext.browserbridge"
-    compileSdk = androidCompileSdkVersion
+    compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
-        minSdk = androidMinSdkVersion
+        minSdk = libs.versions.minSdk.get().toInt()
     }
 }
 
@@ -50,6 +47,6 @@ kotlin {
 
 dependencies {
     // 契约来自宿主仓库（复合构建 substitution，见 settings.gradle.kts）。
-    // compileOnly：宿主运行时已经带着这些类，打进 .dshx 只会重复。
+    // compileOnly：宿主运行时已带着这些类，打进 .dshx 只会重复。
     compileOnly("me.bmax.apatch:ext-api:1.0")
 }
