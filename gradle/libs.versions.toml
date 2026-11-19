@@ -12,6 +12,15 @@ compose-bom = "2026.09.00"
 material3 = "1.5.0-beta02"
 coroutines = "1.11.0"
 
+# SDK 版本。**必须与宿主一致**：扩展的 classes.dex 与宿主在同一进程里跑，
+# 宿主是 minSdk 26 / compileSdk 37（见宿主 build.gradle.kts 的 extra 声明）。
+#
+# 这里显式写数字，不从宿主读：rootProject.extra 在复合构建里指的是**本仓库**的
+# rootProject，不是宿主 —— 那边没有那两个 extra，取不到就抛
+# 「Cannot get non-null extra property」。曾经那样写过，CI 报的正是这个错。
+compileSdk = "37"
+minSdk = "26"
+
 [plugins]
 agp-lib = { id = "com.android.library", version.ref = "agp" }
 kotlin-compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
