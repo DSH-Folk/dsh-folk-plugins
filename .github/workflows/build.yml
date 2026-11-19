@@ -96,7 +96,13 @@ jobs:
         run: |
           set -uo pipefail
           SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
-          PLATFORM=$(grep -oE 'compileSdk = [0-9]+' "extensions/${{ matrix.id }}/build.gradle.kts" | grep -oE '[0-9]+' | head -1)
+          # compileSdk 可能写成字面量，也可能走版本目录（libs.versions.compileSdk）。
+          # 两种都要认：只认字面量时，扩展一旦改用版本目录这里就 grep 空、
+          # 而 set -o pipefail 会让整条流水线以 1 退出 —— 报的错还完全看不出原因。
+          PLATFORM=$(grep -oE 'compileSdk[[:space:]]*=[[:space:]]*[0-9]+' "extensions/${{ matrix.id }}/build.gradle.kts" 2>/dev/null | grep -oE '[0-9]+' | head -1 || true)
+          if [ -z "$PLATFORM" ]; then
+            PLATFORM=$(grep -oE '^compileSdk[[:space:]]*=[[:space:]]*"[0-9]+"' gradle/libs.versions.toml 2>/dev/null | grep -oE '[0-9]+' | head -1 || true)
+          fi
           echo "compileSdk 期望: ${PLATFORM:-未知}"
           if ls "$SDK/platforms" 2>/dev/null | grep -qE "^android-${PLATFORM}(\.|$)"; then
             echo "已有 platforms;android-${PLATFORM}"
