@@ -35,4 +35,4 @@ includeBuild("../DSH-Folk") {
     }
 }
 
-include(":extensions:dsh-go-shell")
+include(":extensions:dsh-browser-bridge")
