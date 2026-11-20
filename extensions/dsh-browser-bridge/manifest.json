@@ -1,8 +1,11 @@
 {
   "id": "dsh-browser-bridge",
   "name": "浏览器桥",
-  "version": "1.0.0",
-  "description": "让容器里的 dsh 通过 DevTools 协议操作应用内的浏览器：读页面、执行 JS、截屏。启用本扩展会自动打开浏览器模式并开启 WebView 调试通道。",
-  "declaredCaps": ["host:webview-debug", "host:browser-mode"],
-  "minAppVersion": "2.2.0"
+  "version": "1.1.0",
+  "description": "让容器里的 dsh 通过 DevTools 协议操作应用内的浏览器：读页面、执行 JS、截屏。启用后会自动打开浏览器模式与 WebView 调试通道，并把 dsh-browser 命令装进容器。",
+  "declaredCaps": [
+    "host:webview-debug",
+    "host:browser-mode"
+  ],
+  "minAppVersion": "2.2.1"
 }
