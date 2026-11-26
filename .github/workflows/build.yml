@@ -235,7 +235,7 @@ jobs:
           mv index.json.tmp index.json
           cat index.json
 
-      # 回填 index.json 并推回 main。
+      # 回填 index.json 并推回 main。（并发安全：pull --rebase + 重试）
       #
       # ## 为什么必须重试
       #
