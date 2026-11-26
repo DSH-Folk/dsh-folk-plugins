@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/DSH-Folk/dsh-folk-plugins",
-  "generatedAt": "2026-11-26T03:23:55Z",
+  "generatedAt": "2026-11-26T03:26:07Z",
   "extensions": [
     {
       "id": "dsh-browser-bridge",
@@ -30,8 +30,8 @@
       ],
       "minApi": 1,
       "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-minimal-shell-v1.0.0/dsh-minimal-shell-1.0.0.dshx",
-      "sha256": "",
-      "sizeBytes": 0
+      "sha256": "0b1899bdda6e725fb7b2792392a1ea385069786e4625132309a390de8bb53a6f",
+      "sizeBytes": 59664
     }
   ]
 }
