@@ -37,6 +37,16 @@ data class MinimalPalette(
     val logSurface: Color,
     /** 日志文字。 */
     val logText: Color,
+
+    // ── 悬浮日志面板（SillyDroid floating_logs_* 那一组） ──
+    /** 面板底色。 */
+    val panelBackground: Color,
+    /** 面板描边（1dp，深色下是一圈细亮线）。 */
+    val panelStroke: Color,
+    /** 面板内日志区底色（再深一档，形成"面板里嵌了一块屏幕"的层次）。 */
+    val panelSurface: Color,
+    /** 面板内日志文字。 */
+    val logContent: Color,
 )
 
 /** 浅色：SillyDroid values/colors.xml。 */
@@ -49,6 +59,11 @@ private val Light = MinimalPalette(
     buttonStroke = Color(0xFFE5E7EB),
     logSurface = Color(0xFFF1F5F9),
     logText = Color(0xFF111827),
+    // values/colors.xml: floating_logs_panel_background #F8FAFC / stroke #D1D5DB
+    panelBackground = Color(0xFFF8FAFC),
+    panelStroke = Color(0xFFD1D5DB),
+    panelSurface = Color(0xFFE5E7EB),
+    logContent = Color(0xFF111827),
 )
 
 /** 深色：SillyDroid values-night/colors.xml。 */
@@ -61,6 +76,11 @@ private val Dark = MinimalPalette(
     buttonStroke = Color(0xFF334155),
     logSurface = Color(0xFF0B1220),
     logText = Color(0xFFCBD5E1),
+    // values-night/colors.xml: panel_background #111827 / stroke #334155 / surface #1F2937
+    panelBackground = Color(0xFF111827),
+    panelStroke = Color(0xFF334155),
+    panelSurface = Color(0xFF1F2937),
+    logContent = Color(0xFFE5E7EB),
 )
 
 /**

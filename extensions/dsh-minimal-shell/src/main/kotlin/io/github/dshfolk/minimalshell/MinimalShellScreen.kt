@@ -1,5 +1,6 @@
 package io.github.dshfolk.minimalshell
 
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -76,33 +77,58 @@ fun MinimalShellScreen(
     //
     // 现在改成：NavHost 永远挂在底层，极简启动屏作为浮层盖在它上面。
     // 切到子页面时把浮层收起来，露出下面的宿主页面。
+    // 管理中心是壳内的一层，不占宿主路由：它由 onOpenManager 打开、onBack 关闭。
+    var managerOpen by remember { mutableStateOf(false) }
+
     Box(Modifier.fillMaxSize().background(palette.background)) {
-        // 底层：宿主页面树。永远存在，只是被浮层盖住时看不见。
+        // 底层：宿主页面树。**永远**在组合树里 —— NavHost 一旦不组合，
+        // navController.graph 就永远初始化不了，点设置/终端会直接闪退。
         hostContent(Modifier.fillMaxSize())
 
-        if (currentTab == ExtensionShellTabs.HOME) {
-            // 浮层：极简启动屏。用不透明底色盖住底层，视觉上与"只有启动屏"一致。
-            Box(Modifier.fillMaxSize().background(palette.background)) {
-                MinimalHome(
-                    shellHost = shellHost,
-                    host = host,
-                    config = config,
-                    palette = palette,
-                )
+        when {
+            managerOpen -> {
+                // 管理中心：盖住宿主页面，但宿主 NavHost 仍在下面活着。
+                Box(Modifier.fillMaxSize().background(palette.background)) {
+                    MinimalManager(
+                        shellHost = shellHost,
+                        host = host,
+                        palette = palette,
+                        onBack = { managerOpen = false },
+                        onOpenHostTab = { tabId ->
+                            managerOpen = false
+                            shellHost.navigate(tabId)
+                        },
+                    )
+                }
             }
-        } else {
-            // 子页面：露出宿主页面，只加一条返回栏。
-            Column(Modifier.fillMaxSize()) {
-                SubPageBar(
-                    title = when (currentTab) {
-                        ExtensionShellTabs.TERMINAL -> "终端"
-                        ExtensionShellTabs.PLUGINS -> "扩展"
-                        ExtensionShellTabs.SETTINGS -> "设置"
-                        else -> currentTab
-                    },
-                    palette = palette,
-                    onBack = { shellHost.navigate(ExtensionShellTabs.HOME) },
-                )
+
+            currentTab == ExtensionShellTabs.HOME -> {
+                // 启动屏浮层：用不透明底色盖住底层，视觉上就是"只有启动屏"。
+                Box(Modifier.fillMaxSize().background(palette.background)) {
+                    MinimalHome(
+                        shellHost = shellHost,
+                        host = host,
+                        config = config,
+                        palette = palette,
+                        onOpenManager = { managerOpen = true },
+                    )
+                }
+            }
+
+            else -> {
+                // 子页面：露出宿主页面，只加一条返回栏。
+                Column(Modifier.fillMaxSize()) {
+                    SubPageBar(
+                        title = when (currentTab) {
+                            ExtensionShellTabs.TERMINAL -> "终端"
+                            ExtensionShellTabs.PLUGINS -> "扩展"
+                            ExtensionShellTabs.SETTINGS -> "设置"
+                            else -> currentTab
+                        },
+                        palette = palette,
+                        onBack = { shellHost.navigate(ExtensionShellTabs.HOME) },
+                    )
+                }
             }
         }
     }
@@ -126,6 +152,30 @@ private fun SubPageBar(title: String, palette: MinimalPalette, onBack: () -> Uni
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.align(Alignment.Center),
+        )
+    }
+}
+
+/**
+ * 扩展页里的配置入口。
+ *
+ * 这里刻意**不做**完整开关列表 —— 那会和壳内的管理中心形成两套真源，
+ * 用户改了这边那边不刷新。只告诉他在哪改。
+ */
+@Composable
+private fun ShellConfigPointer() {
+    val palette = minimalPalette()
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text(
+            "极简壳的所有设置都在它的管理界面里。",
+            color = palette.body,
+            fontSize = 13.sp,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "打开极简启动屏 → 点右上角齿轮。",
+            color = palette.secondary,
+            fontSize = 12.sp,
         )
     }
 }

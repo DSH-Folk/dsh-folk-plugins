@@ -31,8 +31,10 @@ class MinimalShellExtension : DshExtension {
         ExtensionUiRegistry.registerShell(host.id) { shellHost, hostContent ->
             MinimalShellScreen(shellHost, host, hostContent)
         }
+        // 配置面板（扩展页里那个入口）只给一句指路：真正的管理界面在壳自己的齿轮里。
+        // 两边各做一套开关的话，用户不知道该信哪个 —— 而且改了一边另一边不刷新。
         ExtensionUiRegistry.registerConfigPanel(host.id, "极简启动壳") {
-            MinimalShellConfigPanel()
+            ShellConfigPointer()
         }
         host.log("极简启动壳已加载")
     }
