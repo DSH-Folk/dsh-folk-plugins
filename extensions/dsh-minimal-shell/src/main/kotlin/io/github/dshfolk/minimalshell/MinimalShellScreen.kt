@@ -163,7 +163,7 @@ private fun SubPageBar(title: String, palette: MinimalPalette, onBack: () -> Uni
  * 用户改了这边那边不刷新。只告诉他在哪改。
  */
 @Composable
-private fun ShellConfigPointer() {
+fun ShellConfigPointer() {
     val palette = minimalPalette()
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Text(

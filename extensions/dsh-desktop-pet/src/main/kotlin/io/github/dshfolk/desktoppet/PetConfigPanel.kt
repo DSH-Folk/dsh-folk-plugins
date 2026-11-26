@@ -19,6 +19,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +63,7 @@ fun PetConfigPanel(
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val s = PetConfigHolder.store() ?: return@rememberLauncherForActivityResult
+        // launch 是 CoroutineScope 的扩展函数，必须挂在 scope 上（不能裸调）。
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val ok = PetImageStore.importFrom(context, uri, s.petImageFile())
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
