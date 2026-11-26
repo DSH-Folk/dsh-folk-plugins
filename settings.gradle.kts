@@ -36,3 +36,4 @@ includeBuild("../DSH-Folk") {
 }
 
 include(":extensions:dsh-browser-bridge")
+include(":extensions:dsh-minimal-shell")

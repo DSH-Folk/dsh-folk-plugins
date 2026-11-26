@@ -2,6 +2,7 @@ package me.bmax.apatch.ext.browserbridge
 
 import me.bmax.apatch.dsh.ext.DshExtension
 import me.bmax.apatch.dsh.ext.DshExtensionHost
+import me.bmax.apatch.dsh.ext.ExtensionHookRegistry
 import me.bmax.apatch.dsh.ext.HostSwitch
 
 /**
@@ -31,6 +32,22 @@ class BrowserBridgeExtension : DshExtension {
             // 只有 manifest 没声明才会走到这里 —— 那是打包错误，不是用户的问题。
             host.log("无法开启浏览器模式：manifest 未声明 host:browser-mode")
         }
+        // 调试通道**必须**自己开。
+        //
+        // 1.1.0 及以前只开了浏览器模式，靠用户在设置里手动打开调试通道 —— 但扩展的整个
+        // 卖点就是「装好就能用」，用户没有任何理由知道要去哪开它。表现是：扩展显示已启用、
+        // 命令也装进容器了，一执行就报「WebView 调试通道没有开启」，而那句提示只说要用户
+        // 去开，扩展自己却什么都没做。
+        val debugOk = host.host.set(HostSwitch.WEBVIEW_DEBUG, true)
+        if (!debugOk) {
+            host.log("无法开启 WebView 调试通道：manifest 未声明 host:webview-debug")
+        }
+        // 提示词注入：让容器里的 Agent **知道**有这个命令。
+        //
+        // 不注入的话，命令在容器里躺着但没人会去用 —— Agent 不知道它存在，用户也不知道
+        // 该让 Agent 做什么。注入走 host-facts.json 的 sections（见宿主 DshHostPrompt），
+        // 每轮重新读取，装/卸扩展不必重启 dsh。
+        registerPromptHook(host)
         host.log(
             "浏览器桥已加载（浏览器模式=" + host.host.get(HostSwitch.BROWSER_MODE) +
                 "，调试通道=" + host.host.get(HostSwitch.WEBVIEW_DEBUG) + "）",
@@ -64,7 +81,49 @@ class BrowserBridgeExtension : DshExtension {
     override fun onUnload() {
     }
 
+
+    /**
+     * 把 `dsh-browser` 的用法写进系统提示词。
+     *
+     * 内容只讲**怎么用**，不讲实现：Agent 需要知道命令名、四个子命令、以及那个绕不开的
+     * 前置条件（先 adb forward）。写得含糊的话，Agent 会去猜端口、或者直接放弃。
+     *
+     * 走 `before` 而不是 `around`：`around` 能拦下宿主默认实现（返回 false 就整段跳过），
+     * 而这里只想**追加**一段，没有理由能影响别的扩展。
+     */
+    private fun registerPromptHook(host: DshExtensionHost) {
+        ExtensionHookRegistry.before(host.id, ExtensionHookRegistry.Point.PROMPT_RENDER) { payload ->
+            // sections 是宿主推荐的追加位（见 DshHostPrompt.collectExtensionPrompts）。
+            // 类型是 MutableList<String>；取不到就静默跳过 —— 钩子抛异常会被宿主记日志，
+            // 但那条日志说的是"钩子失败"，对排查提示词没出现没有帮助。
+            val sections = payload["sections"] as? MutableList<*> ?: return@before
+            @Suppress("UNCHECKED_CAST")
+            (sections as MutableList<String>).add(PROMPT_SECTION)
+        }
+    }
+
     private companion object {
+        /**
+         * 注入到系统提示词里的说明。
+         *
+         * 用 trimIndent 而不是手写缩进：这段文字会原样进提示词，多余的前导空格会被
+         * 模型当成格式信号（它可能据此认为这是引用块）。
+         */
+        val PROMPT_SECTION = """
+        |## 浏览器操作（dsh-browser）
+        |
+        |容器里装了 `dsh-browser`，可以通过 DevTools 协议操作应用内的 WebView：
+        |
+        |- `dsh-browser targets` —— 列出可调试的页面
+        |- `dsh-browser version` —— 打印 WebView 的 DevTools 版本
+        |- `dsh-browser eval "<js>"` —— 在页面里执行 JS，打印返回值
+        |- `dsh-browser shot <file>` —— 截屏保存为 PNG
+        |
+        |前置条件：需要在应用里开启 WebView 调试通道，并做一次端口转发
+        |（`adb forward tcp:9222 localabstract:<socket>`），然后用
+        |`--endpoint http://127.0.0.1:9222` 指定地址。socket 名可以在应用设置里看到。
+        """.trimMargin()
+
         /**
          * `dsh-browser` 的脚本正文。
          *
@@ -172,10 +231,24 @@ class BrowserBridgeExtension : DshExtension {
                 for (let i = 0; i < len; i++) masked[i] = payload[i] ^ mask[i % 4];
                 socket.write(Buffer.concat([header, mask, masked]));
               };
+              // 分片拼接状态。
+              //
+              // WebSocket 允许把一条消息拆成多帧：首帧 FIN=0（还有后续）+ opcode=0x1，
+              // 之后每帧 FIN 位表示是不是最后一帧、opcode=0x0（continuation）。
+              // 1.1.0 直接 `if (opcode !== 0x1) continue` 把续帧全丢了 —— 于是任何
+              // 超过一帧的消息都解析失败。
+              //
+              // 最典型的受害者是 `shot`：截屏是 base64 PNG，几百 KB 起步，CDP 必然分片。
+              // 表现是 shot 偶尔成功（小图）、大图永远「截屏返回空」——因为首帧只到一半，
+              // JSON.parse 失败，被 continue 吞掉，最后超时。
+              let frag = null;      // 已收到的分片（Buffer），null = 当前不在拼接中
+              let fragOpcode = 0;   // 首帧的 opcode（用来区分是文本还是别的）
               socket.on('data', function (chunk) {
                 buf = Buffer.concat([buf, chunk]);
                 while (buf.length >= 2 && !done) {
-                  const opcode = buf[0] & 0x0f;
+                  const b0 = buf[0];
+                  const fin = (b0 & 0x80) !== 0;
+                  const opcode = b0 & 0x0f;
                   let off = 2;
                   let len = buf[1] & 0x7f;
                   if (len === 126) { if (buf.length < 4) return; len = buf.readUInt16BE(2); off = 4; }
@@ -184,7 +257,47 @@ class BrowserBridgeExtension : DshExtension {
                   const data = buf.slice(off, off + len);
                   buf = buf.slice(off + len);
                   if (opcode === 0x8) { if (!done) { done = true; reject(new Error('WebSocket 被关闭')); } return; }
-                  if (opcode !== 0x1) continue;
+                  // ping：按协议要回 pong，否则某些实现对端会主动断开。
+                  // 这里只需要活到收完一条响应，回一个空 pong 就够。
+                  if (opcode === 0x9) {
+                    const mask2 = require('crypto').randomBytes(4);
+                    const payload = data;
+                    const masked = Buffer.alloc(payload.length);
+                    for (let i = 0; i < payload.length; i++) masked[i] = payload[i] ^ mask2[i % 4];
+                    const h = Buffer.from([0x8a, 0x80 | payload.length]);
+                    socket.write(Buffer.concat([h, mask2, masked]));
+                    continue;
+                  }
+                  if (opcode === 0xa) continue;   // pong：忽略
+                  // 数据帧：0x1 文本 / 0x2 二进制，都是新消息的开头
+                  if (opcode === 0x1 || opcode === 0x2) {
+                    if (fin) {
+                      // 单帧整条消息，最常见的情况
+                      frag = null; fragOpcode = 0;
+                    } else {
+                      // 首帧还有后续：开一段拼接
+                      frag = data; fragOpcode = opcode;
+                      continue;
+                    }
+                  } else if (opcode === 0x0) {
+                    // 续帧：接到正在拼的那段后面
+                    if (frag === null) continue;   // 没有首帧就来续帧，丢弃
+                    frag = Buffer.concat([frag, data]);
+                    if (!fin) continue;            // 还有后续，继续攒
+                    // 收到最后一帧：整条消息齐了
+                    const whole = frag;
+                    const wholeOp = fragOpcode;
+                    frag = null; fragOpcode = 0;
+                    // 用**清空前**记下的 opcode 判断：顺序写反的话这里恒为 0，
+                    // 所有分片消息都会被丢掉 —— 而 shot 恰恰只能走分片。
+                    if (wholeOp !== 0x1) continue;
+                    let msg2;
+                    try { msg2 = JSON.parse(whole.toString('utf8')); } catch (e) { continue; }
+                    if (msg2.id === 1) { done = true; socket.end(); resolve(msg2.result || {}); }
+                    continue;
+                  } else {
+                    continue;   // 其他控制帧（0xB/0xC 等）忽略
+                  }
                   let msg;
                   try { msg = JSON.parse(data.toString('utf8')); } catch (e) { continue; }
                   if (msg.id === 1) { done = true; socket.end(); resolve(msg.result || {}); }
@@ -229,10 +342,24 @@ class BrowserBridgeExtension : DshExtension {
               if (cmd === 'eval' && !rest[1]) fail('eval 需要一个 JS 表达式');
               const result = await cdp(page.webSocketDebuggerUrl, method, params);
               if (cmd === 'eval') {
-                const r = result.result || {};
-                if (r.exceptionDetails) fail('页面里抛了异常：' + JSON.stringify(r.exceptionDetails));
-                const v = r.result && r.result.value;
-                console.log(typeof v === 'string' ? v : JSON.stringify(v));
+                // cdp() 已经把 WebSocket 消息的 msg.result 解出来了（见它的 resolve）。
+                // CDP 的 Runtime.evaluate 响应形状是：
+                //   { result: { result: { type, value }, exceptionDetails? } }
+                // 所以这里 result.result 才是 RemoteObject，再往里 .value 才是值。
+                // 1.1.0 多取了一层（result.result.result.value），取值恒为 undefined ——
+                // 表现是 eval 永远打印 undefined，看起来像页面里没返回值。
+                if (result.exceptionDetails) {
+                  fail('页面里抛了异常：' + JSON.stringify(result.exceptionDetails));
+                }
+                const remote = result.result || {};
+                const v = remote.value;
+                // 没有 value 说明返回的是对象/函数这类不可序列化的东西，把类型说清楚，
+                // 而不是打印 undefined 让人以为表达式没生效。
+                if (v === undefined) {
+                  console.log('[无返回值: ' + (remote.type || 'unknown') + ']');
+                } else {
+                  console.log(typeof v === 'string' ? v : JSON.stringify(v));
+                }
               } else {
                 const data = (result.data || '');
                 if (!data) fail('截屏返回空');

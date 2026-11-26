@@ -1,22 +1,37 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/DSH-Folk/dsh-folk-plugins",
-  "generatedAt": "2026-11-20T00:53:38Z",
+  "generatedAt": "2026-11-26T03:19:55Z",
   "extensions": [
     {
       "id": "dsh-browser-bridge",
       "name": "浏览器桥",
-      "version": "1.1.0",
-      "description": "让容器里的 dsh 通过 DevTools 协议操作应用内的浏览器：读页面、执行 JS、截屏。启用后自动打开浏览器模式与调试通道，并把 dsh-browser 命令装进容器。",
+      "version": "1.2.0",
+      "description": "让容器里的 dsh 通过 DevTools 协议操作应用内的浏览器：读页面、执行 JS、截屏。启用后自动打开浏览器模式与调试通道，把 dsh-browser 命令装进容器，并让 Agent 知道这个命令怎么用。",
       "author": "DSH-Folk",
       "declaredCaps": [
         "host:webview-debug",
         "host:browser-mode"
       ],
       "minApi": 1,
-      "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-browser-bridge-v1.1.0/dsh-browser-bridge-1.1.0.dshx",
-      "sha256": "963d3b1d86b2e60e797a04825fdbb7c0e40061af4677477b3f7d20d4ef64ac3e",
-      "sizeBytes": 5628
+      "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-browser-bridge-v1.2.0/dsh-browser-bridge-1.2.0.dshx",
+      "sha256": "",
+      "sizeBytes": 0
+    },
+    {
+      "id": "dsh-minimal-shell",
+      "name": "极简启动壳",
+      "version": "1.0.0",
+      "description": "把外壳换成一块极简启动屏：点开就自动拉起容器，实时滚动显示启动日志，就绪后自动进入对话界面。",
+      "author": "DSH-Folk",
+      "declaredCaps": [
+        "ui.shell",
+        "ui.config"
+      ],
+      "minApi": 1,
+      "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-minimal-shell-v1.0.0/dsh-minimal-shell-1.0.0.dshx",
+      "sha256": "",
+      "sizeBytes": 0
     }
   ]
 }
