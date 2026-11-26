@@ -187,6 +187,28 @@ jobs:
             echo "file=$NAME-$VERSION.dshx"
           } >> "$GITHUB_OUTPUT"
 
+          # 写一份产物信息，交给后面的串行 index job 汇总。
+          # 为什么走 artifact 而不是在这里直接改 index.json：三个 matrix job 并发改
+          # 同一个文件必然冲突（详见 index job 的注释）。
+          mkdir -p packs
+          jq -n \
+            --arg id "$NAME" \
+            --arg v "$VERSION" \
+            --arg sha "$SHA" \
+            --argjson size "$SIZE" \
+            --arg url "https://github.com/${GITHUB_REPOSITORY}/releases/download/ext-${NAME}-v${VERSION}/${NAME}-${VERSION}.dshx" \
+            '{id: $id, version: $v, sha256: $sha, sizeBytes: $size, downloadUrl: $url}' \
+            > "packs/${NAME}.json"
+          cat "packs/${NAME}.json"
+
+      - name: 上传产物信息
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pack-${{ matrix.id }}
+          path: packs/
+          if-no-files-found: warn
+
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:
@@ -206,111 +228,92 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 回填 index.json
-        env:
-          NAME: ${{ steps.pack.outputs.name }}
-          VERSION: ${{ steps.pack.outputs.version }}
-          SHA: ${{ steps.pack.outputs.sha }}
-          SIZE: ${{ steps.pack.outputs.size }}
-          REPO: ${{ github.repository }}
+
+  # 回填 index.json 并推回 main —— **单独一个 job，串行执行**。
+  #
+  # ## 为什么不能放在 matrix 里
+  #
+  # 原来回填是 matrix 每个 job 的最后一步，三个扩展并发跑完、各自改同一个
+  # index.json 再 push。并发写同一文件必然互相覆盖：
+  #
+  #   ! [rejected] main -> main (fetch first)
+  #   error: could not apply ... chore(index): 回填 dsh-desktop-pet v1.0.0
+  #
+  # 试过 pull --rebase + 重试，只能把失败率降下来 —— 因为 rebase 同一个提交时
+  # 仍会冲突（三个 job 都在改 index.json 的同一片区域）。
+  #
+  # 真正可靠的做法是**让它只有一个写者**：matrix 只负责编译与发 Release，
+  # 把产物信息写进 artifact；这个 job 等所有 matrix job 结束后跑一次，
+  # 从 artifact 里读回每个扩展的 name/version/sha/size，一次性写进 index.json 并提交。
+  #
+  # 这样天然没有并发，也就不需要任何重试逻辑。
+  index:
+    name: 回填 index.json
+    needs: extensions
+    # matrix 里有 job 失败时也要跑：其它扩展的产物已经发出去了，
+    # 它们的 sha256 同样需要回填，否则市场里装不上。
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 收集产物信息
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pack-*
+          path: packs
+          merge-multiple: true
+
+      - name: 写入 index.json 并提交
         run: |
           set -euo pipefail
-          URL="https://github.com/$REPO/releases/download/ext-$NAME-v$VERSION/$NAME-$VERSION.dshx"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-          if ! jq -e --arg n "$NAME" '.extensions | map(.id) | index($n)' index.json > /dev/null; then
-            echo "::error::index.json 里没有 $NAME 条目"
-            exit 1
+          if [ ! -d packs ] || [ -z "$(ls -A packs 2>/dev/null)" ]; then
+            echo "没有产物信息，跳过"
+            exit 0
           fi
 
-          jq --arg n "$NAME" --arg v "$VERSION" --arg sha "$SHA" --arg url "$URL" \
-             --arg now "$NOW" --argjson size "$SIZE" '
-            .generatedAt = $now
-            | .extensions |= map(
-                if .id == $n then
-                  .version = $v | .sha256 = $sha | .downloadUrl = $url | .sizeBytes = $size
-                else . end
-              )
-          ' index.json > index.json.tmp
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          # 逐个产物应用。用 jq 的 --slurpfile 把多份改动串起来：
+          # 每份是一个 {id, version, sha256, sizeBytes, downloadUrl} 对象。
+          ARGS=()
+          FILTER='.generatedAt = $now'
+          i=0
+          for f in packs/*.json; do
+            [ -f "$f" ] || continue
+            i=$((i+1))
+            ARGS+=(--slurpfile "p$i" "$f")
+            FILTER="$FILTER | .extensions |= map(. as \$e | (\$p$i[0]) as \$n | if .id == \$n.id then .version = \$n.version | .sha256 = \$n.sha256 | .downloadUrl = \$n.downloadUrl | .sizeBytes = \$n.sizeBytes else . end)"
+          done
+          if [ "$i" = "0" ]; then
+            echo "产物信息为空，跳过"
+            exit 0
+          fi
+
+          jq --arg now "$NOW" "${ARGS[@]}" "$FILTER" index.json > index.json.tmp
           mv index.json.tmp index.json
           cat index.json
 
-      # 回填 index.json 并推回 main。（并发安全：pull --rebase + 重试）
-      #
-      # ## 为什么必须重试
-      #
-      # matrix 里每个扩展是一个独立 job，它们**并发**跑完、各自回填同一个 index.json
-      # 再 git push。三个 job 同时 push 时，只有第一个成功，其余被拒（fetch first）——
-      # 而那时编译、打包、发 Release 全都已经成功，只有最后这一下失败。
-      #
-      # 表现为：产物在 Release 页面能看到，但 index.json 里 sha256 还是空的，
-      # 应用内的扩展市场因此装不上。排查时容易误以为是编译问题（job 是红的）。
-      #
-      # 修法：push 前先 rebase 到远端最新，失败就重试。因为每个 job 只改**自己那一条**
-      # 扩展记录（jq 里是 map + if .id == $n），rebase 不会冲突。
-      - name: 提交 index.json 回 main
-        # 这些值必须重新声明：上一步的 env 不会跨步骤保留，直接用会展开成空字符串
-        # （那会让 jq 把 sha256 写成 ""，而 push 却"成功"了 —— 最难发现的那种坏）。
-        env:
-          NAME: ${{ steps.pack.outputs.name }}
-          VERSION: ${{ steps.pack.outputs.version }}
-          SHA: ${{ steps.pack.outputs.sha }}
-          SIZE: ${{ steps.pack.outputs.size }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          URL="https://github.com/$REPO/releases/download/ext-$NAME-v$VERSION/$NAME-$VERSION.dshx"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           git config user.name "dsh-folk-ci"
           git config user.email "dsh-folk-ci@users.noreply.github.com"
-
-          # 同步到远端最新。
-          #
-          # ## 为什么不能直接 pull --rebase
-          #
-          # **上一步（回填 index.json）已经改过工作树里的文件了** —— 这一步开始时
-          # index.json 就是"未提交的改动"状态。而 pull --rebase 要求工作树干净，
-          # 于是直接失败：
-          #   error: cannot pull with rebase: You have unstaged changes.
-          #
-          # 这个坑很难从脚本上看出来：注释写"先 pull 再改文件"是对的，但**上一步**
-          # 已经改过了，本步的"先"并不成立。
-          #
-          # 正确做法：stash 掉现有改动 → pull → pop 回来。pop 可能冲突，但每个 job
-          # 只改自己那一条记录（jq 里 map + if .id == $n），冲突不会发生。
-          git stash push --include-untracked -m "ci-index-backfill" >/dev/null 2>&1 || true
-          git pull --rebase origin main || { echo "::error::无法同步到远端"; exit 1; }
-          git stash pop >/dev/null 2>&1 || true
-
-          # 现在工作树是最新的，重新跑一次 jq 保证自己这条记录是最新的
-          # （stash pop 之后值可能被别人的版本覆盖）。
-          jq --arg n "$NAME" --arg v "$VERSION" --arg sha "$SHA" --arg url "$URL" \
-             --arg now "$NOW" --argjson size "$SIZE" '
-            .generatedAt = $now
-            | .extensions |= map(
-                if .id == $n then
-                  .version = $v | .sha256 = $sha | .downloadUrl = $url | .sizeBytes = $size
-                else . end
-              )
-          ' index.json > index.json.tmp
-          mv index.json.tmp index.json
-
-          if git diff --quiet -- index.json; then
-            echo "index.json 无变化，跳过提交"
+          git add index.json
+          if git diff --quiet --cached; then
+            echo "index.json 无变化"
             exit 0
           fi
-          git add index.json
-          git commit -m "chore(index): 回填 $NAME v$VERSION [skip ci]"
+          git commit -m "chore(index): 回填扩展产物信息 [skip ci]"
 
-          # 重试 push：提交与 push 之间仍可能被别的 matrix job 抢先。
-          # 被拒时先 pull --rebase（此时工作树是干净的：改动已 commit），再重试。
-          for i in 1 2 3 4 5; do
+          # 这里仍可能被人工推送抢先，但只有一个写者，重试几乎必然成功。
+          for n in 1 2 3; do
             if git push; then
-              echo "已推送（第 $i 次）"
+              echo "已推送（第 $n 次）"
               exit 0
             fi
-            echo "push 被拒，第 $i 次重试…"
-            git pull --rebase origin main || { git rebase --abort; exit 1; }
+            echo "push 被拒，第 $n 次重试…"
+            git pull --rebase origin main
           done
-          echo "::error::index.json 推送连续失败 5 次"
+          echo "::error::index.json 推送连续失败"
           exit 1
