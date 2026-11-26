@@ -30,7 +30,7 @@ enum class PetDisplay {
     OVERLAY;
 
     companion object {
-        fun of(name: String?): PetDisplay = entries.firstOrNull { it.name == name } ?: WEBUI
+        fun of(name: String?): PetDisplay = entries.firstOrNull { it.name == name } ?: HOST
     }
 }
 
@@ -63,7 +63,12 @@ enum class PetSpeechMode {
  * 它会被写进日志、会被 ConfigPanel 的 state 持有，随手打一下就泄了。
  */
 data class PetConfig(
-    val display: PetDisplay = PetDisplay.WEBUI,
+    // 默认「仅应用内」而不是「仅网页内」。
+    //
+    // 理由是可发现性：WEBUI 档只在 dsh 网页里出现，用户装完扩展、打开 App 首页
+    // 找不到桌宠，第一反应是"没生效"。HOST 档一装就能在宿主界面看到，
+    // 用户确认它活着之后，再按需切到其它档。
+    val display: PetDisplay = PetDisplay.HOST,
     /** 透明度 0.2–1.0。 */
     val opacity: Float = 1f,
     val size: PetSize = PetSize.MEDIUM,
@@ -158,12 +163,27 @@ class PetConfigStore(private val host: DshExtensionHost) {
  */
 object PetConfigHolder {
     private var store: PetConfigStore? = null
-    private var cached: PetConfig? = null
     private var host: DshExtensionHost? = null
+
+    /**
+     * 配置的**可观察**副本。
+     *
+     * ## 为什么必须是 Compose state 而不是普通字段
+     *
+     * 第一版是 `private var cached: PetConfig?`，桌宠那边用
+     * `remember { PetConfigHolder.read() }` 取一份快照 —— 那是**静态值**，
+     * 用户在配置面板改完档位/透明度/尺寸，桌宠不会重组，界面上毫无变化，
+     * 必须重启 App 才生效。
+     *
+     * 改成 `mutableStateOf` 之后，读写都走它，任何一处改动都会让读过它的
+     * Composable 自动重组。
+     */
+    private val state = androidx.compose.runtime.mutableStateOf<PetConfig?>(null)
 
     fun attach(host: DshExtensionHost) {
         if (store == null) store = PetConfigStore(host)
         if (this.host == null) this.host = host
+        if (state.value == null) state.value = store?.load() ?: PetConfig()
     }
 
     /**
@@ -180,15 +200,18 @@ object PetConfigHolder {
 
     fun store(): PetConfigStore? = store
 
-    fun read(): PetConfig {
-        cached?.let { return it }
+    /** 读当前配置（Compose 可观察：在 Composable 里读它，write 之后会自动重组）。 */
+    fun read(): PetConfig = state.value ?: run {
         val loaded = store?.load() ?: PetConfig()
-        cached = loaded
-        return loaded
+        state.value = loaded
+        loaded
     }
 
+    /** 直接拿可观察对象，给需要 `by` 委托的 Composable 用。 */
+    fun observable(): androidx.compose.runtime.MutableState<PetConfig?> = state
+
     fun write(config: PetConfig) {
-        cached = config
+        state.value = config
         store?.save(config)
     }
 }

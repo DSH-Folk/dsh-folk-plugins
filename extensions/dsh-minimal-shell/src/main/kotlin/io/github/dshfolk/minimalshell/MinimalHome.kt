@@ -108,6 +108,18 @@ fun MinimalHome(
     // 只订阅不取快照的话，进页面到第一次状态变化之间会显示"未安装" —— 那一瞬间
     // 的误判会让用户以为运行时丢了。
     var state by remember { mutableStateOf(runtime.state()) }
+
+    // 接管外壳后，宿主首页（HomeDsh）没有机会执行 —— 而 attach 原本是在那里调的。
+    // 不 attach 的话 runtime.state() 读到的是一份未绑定的快照：installed 恒 false、
+    // 端口恒默认值。真机表现就是「未安装」，而容器其实装好了。
+    //
+    // attach 是幂等的（宿主在 Application.onCreate 里也调过），这里补一次没有副作用。
+    LaunchedEffect(Unit) {
+        runCatching { runtime.attach(host.appContext) }
+        // attach 之后再取一次：attach 会刷新宿主事实（installed 等），
+        // 不重取的话界面还停在 attach 之前那份快照上。
+        state = runtime.state()
+    }
     var elapsed by remember { mutableStateOf(0) }
     var errorText by remember { mutableStateOf<String?>(null) }
 
@@ -117,10 +129,14 @@ fun MinimalHome(
         onDispose { unsubscribe() }
     }
 
-    // 启动耗时秒表：只在「准备/启动」期间走。
-    LaunchedEffect(state.running, state.installing) {
+    // 启动耗时秒表：只在「已安装但没就绪」期间走。
+    //
+    // 条件是 installed && !running，**不是**单纯 !running —— 后者在"没装"时也会
+    // 一直计数，用户看到的是「未安装 · 14s」，像在等一个永远不会来的东西。
+    LaunchedEffect(state.installed, state.running, state.installing) {
         elapsed = 0
-        while (!state.running && (state.installing || elapsed < 600)) {
+        if (!state.installed || state.running) return@LaunchedEffect
+        while (!state.running && elapsed < 600) {
             delay(1000)
             elapsed++
         }

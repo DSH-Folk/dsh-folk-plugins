@@ -62,27 +62,48 @@ fun MinimalShellScreen(
     // 直接从 holder 读：用户在配置面板改完，回到 home 立刻生效。
     val config = remember(currentTab) { MinimalConfigHolder.read() }
 
-    if (currentTab == ExtensionShellTabs.HOME) {
-        MinimalHome(
-            shellHost = shellHost,
-            host = host,
-            config = config,
-            palette = palette,
-        )
-    } else {
-        Column(Modifier.fillMaxSize().background(palette.background)) {
-            SubPageBar(
-                title = when (currentTab) {
-                    ExtensionShellTabs.TERMINAL -> "终端"
-                    ExtensionShellTabs.PLUGINS -> "扩展"
-                    ExtensionShellTabs.SETTINGS -> "设置"
-                    else -> currentTab
-                },
-                palette = palette,
-                onBack = { shellHost.navigate(ExtensionShellTabs.HOME) },
-            )
-            // 宿主页面：填满剩余空间，我们不加任何装饰。
-            hostContent(Modifier.fillMaxSize())
+    // ## 为什么 hostContent 必须**始终**在组合树里
+    //
+    // hostContent 里是宿主的 DestinationsNavHost(navController)。它一旦没被组合，
+    // navController.graph 就是未初始化的；而 shellHost.navigate() 内部要读
+    // navController.graph.startDestinationId —— 瞬间抛 IllegalStateException。
+    //
+    // 真机表现：极简壳在首页点「设置」或「终端」直接闪退。
+    //
+    // 第一版写的是 if (HOME) MinimalHome else { ...; hostContent(...) }，
+    // 于是 HOME 那一支里 hostContent 完全脱离了组合树 —— NavHost 从未组合，
+    // graph 自然从未初始化。这不是"延迟一帧"的问题，是**永远**没初始化过。
+    //
+    // 现在改成：NavHost 永远挂在底层，极简启动屏作为浮层盖在它上面。
+    // 切到子页面时把浮层收起来，露出下面的宿主页面。
+    Box(Modifier.fillMaxSize().background(palette.background)) {
+        // 底层：宿主页面树。永远存在，只是被浮层盖住时看不见。
+        hostContent(Modifier.fillMaxSize())
+
+        if (currentTab == ExtensionShellTabs.HOME) {
+            // 浮层：极简启动屏。用不透明底色盖住底层，视觉上与"只有启动屏"一致。
+            Box(Modifier.fillMaxSize().background(palette.background)) {
+                MinimalHome(
+                    shellHost = shellHost,
+                    host = host,
+                    config = config,
+                    palette = palette,
+                )
+            }
+        } else {
+            // 子页面：露出宿主页面，只加一条返回栏。
+            Column(Modifier.fillMaxSize()) {
+                SubPageBar(
+                    title = when (currentTab) {
+                        ExtensionShellTabs.TERMINAL -> "终端"
+                        ExtensionShellTabs.PLUGINS -> "扩展"
+                        ExtensionShellTabs.SETTINGS -> "设置"
+                        else -> currentTab
+                    },
+                    palette = palette,
+                    onBack = { shellHost.navigate(ExtensionShellTabs.HOME) },
+                )
+            }
         }
     }
 }

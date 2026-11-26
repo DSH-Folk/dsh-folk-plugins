@@ -102,7 +102,15 @@ fun PetConfigPanel(
                 }
             }
         } else {
-            Hint("「仅网页内」只在 dsh 页面里出现；「仅应用内」在本应用任何界面都能看到；「全局悬浮窗」能盖在别的应用上。")
+            // 明确告诉用户"现在这个档位在哪能看到"。
+            // 桌宠不显示时，用户第一反应是扩展坏了 —— 而多数情况只是档位不匹配。
+            Hint(
+                when (config.display) {
+                    PetDisplay.WEBUI -> "当前：只在 dsh 网页里出现，要打开对话界面才看得到。"
+                    PetDisplay.HOST -> "当前：在本应用任何界面都能看到（首页、终端、设置都行）。"
+                    PetDisplay.OVERLAY -> ""
+                },
+            )
         }
 
         Spacer(Modifier.height(14.dp))

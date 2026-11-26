@@ -38,6 +38,9 @@ import me.bmax.apatch.dsh.ext.ExtensionUiRegistry
  * 卸载、或安全模式熔断时，宿主自动摘掉窗口 —— 所以这里**不需要**在 onUnload 里
  * 手动清理，也不该自己起 Service（那会多出一条常驻通知）。
  */
+/** 桌宠能出现的位置（与 [PetDisplay] 对应，但语义是"这个槽位代表哪种位置"）。 */
+enum class PetSlot { WEBUI, HOST }
+
 class DesktopPetExtension : DshExtension {
 
     override fun onLoad(host: DshExtensionHost) {
@@ -50,17 +53,17 @@ class DesktopPetExtension : DshExtension {
             ExtensionUiRegistry.Slot.WEBUI_OVERLAY,
             ExtensionUiRegistry.SlotOp.INSERT_AFTER,
         ) { modifier ->
-            PetSlotContent(host, modifier)
+            PetSlotContent(host, PetSlot.WEBUI, modifier)
         }
 
-        // 宿主界面内：插到首页卡片区。与 WEBUI 槽位互不冲突 —— 两者都注册着，
+        // 宿主界面内：插到应用内叠加层。与 WEBUI 槽位互不冲突 —— 两者都注册着，
         // 但 [PetSlotContent] 会按当前配置决定画不画，所以不会同时出现两只。
         ExtensionUiRegistry.registerSlot(
             host.id,
             ExtensionUiRegistry.Slot.HOME_CARD,
             ExtensionUiRegistry.SlotOp.INSERT_AFTER,
         ) { modifier ->
-            PetSlotContent(host, modifier)
+            PetSlotContent(host, PetSlot.HOST, modifier)
         }
 
         ExtensionUiRegistry.registerConfigPanel(host.id, "桌宠") {
@@ -124,7 +127,7 @@ class DesktopPetExtension : DshExtension {
  */
 @Composable
 private fun GlobalPetContent(host: DshExtensionHost, modifier: Modifier) {
-    val config = remember { PetConfigHolder.read() }
+    val config = PetConfigHolder.read()
     var bubble by remember { mutableStateOf<String?>(null) }
     val lexicon = remember { loadLexicon(host) }
 
@@ -155,14 +158,21 @@ private fun GlobalPetContent(host: DshExtensionHost, modifier: Modifier) {
  * 做成两个组件会让"改一处忘另一处"变成必然。
  */
 @Composable
-fun PetSlotContent(host: DshExtensionHost, modifier: Modifier) {
-    val config = remember { PetConfigHolder.read() }
+fun PetSlotContent(host: DshExtensionHost, slot: PetSlot, modifier: Modifier) {
+    // 用可观察状态读配置：用户在面板里改档位/透明度/尺寸后会**立刻**重组，
+    // 不需要重启。第一版用 remember { read() } 取快照，改完没反应。
+    val config = PetConfigHolder.read()
 
-    // 只有当前档位与所在槽位匹配时才画。
-    // 不判断的话，两档都注册了槽位，用户会同时看到两只桌宠。
-    val inWebUi = config.display == PetDisplay.WEBUI
-    val inHost = config.display == PetDisplay.HOST
-    if (!inWebUi && !inHost) return
+    // 每个槽位只响应对应的档位。
+    //
+    // 不区分的话两个槽位会同时画（用户在 WebUI 里看到两只叠在一起的桌宠）。
+    // 判断依据是"这个槽位代表哪种显示位置"，而不是"当前配置是哪个" ——
+    // 后者会让两个槽位都认为自己该画。
+    val matches = when (slot) {
+        PetSlot.WEBUI -> config.display == PetDisplay.WEBUI
+        PetSlot.HOST -> config.display == PetDisplay.HOST
+    }
+    if (!matches) return
 
     var bubble by remember { mutableStateOf<String?>(null) }
     val lexicon = remember { loadLexicon(host) }

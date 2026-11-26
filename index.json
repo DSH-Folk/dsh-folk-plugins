@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/DSH-Folk/dsh-folk-plugins",
-  "generatedAt": "2026-11-26T04:28:19Z",
+  "generatedAt": "2026-11-26T06:42:47Z",
   "extensions": [
     {
       "id": "dsh-browser-bridge",
@@ -21,7 +21,7 @@
     {
       "id": "dsh-minimal-shell",
       "name": "极简启动壳",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "把外壳换成一块极简启动屏：点开就自动拉起容器，实时滚动显示启动日志，就绪后自动进入对话界面。",
       "author": "DSH-Folk",
       "declaredCaps": [
@@ -29,14 +29,14 @@
         "ui.config"
       ],
       "minApi": 1,
-      "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-minimal-shell-v1.0.0/dsh-minimal-shell-1.0.0.dshx",
-      "sha256": "ea89c5dfe82919ea98cf7cffa4954ab3a6075aa185981959fe2c4686b2ecafeb",
-      "sizeBytes": 59664
+      "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-minimal-shell-v1.0.1/dsh-minimal-shell-1.0.1.dshx",
+      "sha256": "",
+      "sizeBytes": 0
     },
     {
       "id": "dsh-desktop-pet",
       "name": "桌宠",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "description": "住在 DSH-Folk 里的桌宠：可拖动、可互动，会跟着容器状态说话。显示位置三档可选（仅网页内 / 仅应用内 / 全局悬浮窗），支持换图、调透明度、导入自己的词库，也能接独立 AI 接口聊天。",
       "author": "DSH-Folk",
       "declaredCaps": [
@@ -44,9 +44,9 @@
         "ui.config"
       ],
       "minApi": 1,
-      "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-desktop-pet-v1.1.0/dsh-desktop-pet-1.1.0.dshx",
-      "sha256": "54428d35815fe23c02205e97bacfd2db97d0cf5012ba3ccbe3525622bb95b707",
-      "sizeBytes": 68747
+      "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-desktop-pet-v1.1.1/dsh-desktop-pet-1.1.1.dshx",
+      "sha256": "",
+      "sizeBytes": 0
     }
   ]
 }

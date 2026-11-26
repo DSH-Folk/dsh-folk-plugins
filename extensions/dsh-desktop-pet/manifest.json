@@ -1,7 +1,7 @@
 {
   "id": "dsh-desktop-pet",
   "name": "桌宠",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "entryClass": "io.github.dshfolk.desktoppet.DesktopPetExtension",
   "description": "住在 DSH-Folk 里的桌宠：可拖动、可互动，会跟着容器状态说话。显示位置三档可选（仅网页内 / 仅应用内 / 全局悬浮窗），支持换图、调透明度、导入自己的词库，也能接独立 AI 接口聊天。",
   "declaredCaps": [
