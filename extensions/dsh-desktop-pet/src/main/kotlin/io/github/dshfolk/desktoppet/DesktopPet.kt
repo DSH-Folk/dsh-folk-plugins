@@ -64,6 +64,8 @@ fun DesktopPet(
     bubble: String?,
     onInteract: (PetScene) -> Unit,
     modifier: Modifier = Modifier,
+    /** 动作条点「换图」时调用（由调用方拉起系统图片选择器）。 */
+    onChangeImage: () -> Unit = {},
 ) {
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var actionsOpen by remember { mutableStateOf(false) }
@@ -140,6 +142,18 @@ fun DesktopPet(
                         if (scene == PetScene.SLEEP) sleeping = true
                         onInteract(scene)
                     },
+                    onChangeImage = {
+                        actionsOpen = false
+                        onChangeImage()
+                    },
+                    onRestoreImage = {
+                        actionsOpen = false
+                        PetConfigHolder.store()?.let { store ->
+                            if (PetImageStore.restoreDefault(store.petImageFile())) {
+                                PetConfigHolder.bumpImageRevision()
+                            }
+                        }
+                    },
                     onClose = { actionsOpen = false },
                 )
             }
@@ -147,16 +161,31 @@ fun DesktopPet(
     }
 }
 
-/** 有自定义图就画图，没有就画一个占位圆。 */
+/**
+ * 画桌宠形象：优先用户自定义图，没有就用内嵌默认形象。
+ *
+ * ## 为什么不再画"占位圆 + 表情"
+ *
+ * 那是第一版的临时占位。桌宠的第一印象就是那张脸，一个绿圆加个表情看起来像
+ * 没做完 —— 而扩展装好后用户看到的正是它。现在内嵌了完整立绘，
+ * 任何情况下都不该再出现占位图形。
+ */
 @Composable
 private fun PetImageOrDefault(config: PetConfig, sleeping: Boolean) {
     val store = PetConfigHolder.store()
     val file = store?.petImageFile()
-    val bitmap = remember(file?.absolutePath, file?.length()) {
+    // imageRevision 作为 remember 的键：换图/恢复默认后自增，强制重新读文件。
+    // 不带上它的话，文件内容变了但键（路径+长度）没变时不会重载。
+    val revision = PetConfigHolder.imageRevision
+
+    val custom = remember(file?.absolutePath, file?.length(), revision) {
         file?.takeIf { it.isFile }?.let { f ->
             runCatching { android.graphics.BitmapFactory.decodeFile(f.absolutePath) }.getOrNull()
         }
     }
+
+    // 自定义图坏了（格式不支持、文件截断）就退回默认形象 —— 不显示空白。
+    val bitmap = custom ?: DefaultPetImage.bitmap
 
     if (bitmap != null) {
         Image(
@@ -165,29 +194,19 @@ private fun PetImageOrDefault(config: PetConfig, sleeping: Boolean) {
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),
         )
-    } else {
-        // 没有图时的占位：一个圆 + 表情。
-        // 不画空白框 —— 用户会以为扩展坏了。
-        Box(
-            Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(percent = 50))
-                .background(Color(0xFF10B981)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = if (sleeping) "z Z" else "•‿•",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium,
-            )
-        }
     }
+    // 连默认图都解不出来时什么都不画（理论上不可能，除非 dex 里的 Base64 被截断）。
+    // 不画占位圆：那会掩盖真正的问题。
 }
 
 /** 下方横向动作条。 */
 @Composable
-private fun PetActions(onAction: (PetScene) -> Unit, onClose: () -> Unit) {
+private fun PetActions(
+    onAction: (PetScene) -> Unit,
+    onChangeImage: () -> Unit,
+    onRestoreImage: () -> Unit,
+    onClose: () -> Unit,
+) {
     Row(
         Modifier
             .padding(top = 8.dp)
@@ -200,6 +219,8 @@ private fun PetActions(onAction: (PetScene) -> Unit, onClose: () -> Unit) {
         ActionChip("喂") { onAction(PetScene.FEED) }
         ActionChip("睡") { onAction(PetScene.SLEEP) }
         ActionChip("聊") { onAction(PetScene.GREET) }
+        ActionChip("换图") { onChangeImage() }
+        ActionChip("还原") { onRestoreImage() }
         ActionChip("×") { onClose() }
     }
 }

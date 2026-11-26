@@ -50,6 +50,28 @@ fun PetConfigPanel(
     val store = PetConfigHolder.store()
     var apiKey by remember { mutableStateOf(store?.apiKey.orEmpty()) }
     var lexiconStatus by remember { mutableStateOf<String?>(null) }
+    var imageStatus by remember { mutableStateOf<String?>(null) }
+
+    // 换图：与桌宠动作条走同一套处理（PetImageStore）。
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val s = PetConfigHolder.store() ?: return@rememberLauncherForActivityResult
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val ok = PetImageStore.importFrom(context, uri, s.petImageFile())
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (ok) {
+                    PetConfigHolder.bumpImageRevision()
+                    imageStatus = "已更新形象"
+                } else {
+                    imageStatus = "换图失败：图片无法解码"
+                }
+            }
+        }
+    }
 
     fun persist(next: PetConfig) {
         config = next
@@ -112,6 +134,26 @@ fun PetConfigPanel(
                 },
             )
         }
+
+        Spacer(Modifier.height(14.dp))
+
+        // ── 形象 ──
+        SectionTitle("形象")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { picker.launch("image/*") }) { Text("换图") }
+            TextButton(onClick = {
+                PetConfigHolder.store()?.let { store ->
+                    if (PetImageStore.restoreDefault(store.petImageFile())) {
+                        PetConfigHolder.bumpImageRevision()
+                        imageStatus = "已恢复默认形象"
+                    }
+                }
+            }) { Text("恢复默认") }
+        }
+        Hint(
+            imageStatus ?: "支持 PNG / JPG / WebP。选完会自动缩放到长边 512 并保留透明通道。" +
+                "动图只取首帧。",
+        )
 
         Spacer(Modifier.height(14.dp))
 

@@ -1,5 +1,12 @@
 package io.github.dshfolk.desktoppet
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -40,6 +47,35 @@ import me.bmax.apatch.dsh.ext.ExtensionUiRegistry
  */
 /** 桌宠能出现的位置（与 [PetDisplay] 对应，但语义是"这个槽位代表哪种位置"）。 */
 enum class PetSlot { WEBUI, HOST }
+
+/**
+ * 换图的公共入口：拉起系统图片选择器，选完处理并落盘。
+ *
+ * 做成一个 remember 出来的 lambda 而不是各调用点各写一遍 —— 桌宠有三个显示位置
+ * （两个槽位 + 悬浮窗），三份重复代码迟早会有两份忘了处理失败分支。
+ */
+@Composable
+fun rememberPetImagePicker(host: DshExtensionHost): () -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult   // 用户取消
+        val store = PetConfigHolder.store() ?: return@rememberLauncherForActivityResult
+        scope.launch(Dispatchers.IO) {
+            val ok = PetImageStore.importFrom(context, uri, store.petImageFile())
+            withContext(Dispatchers.Main) {
+                if (ok) {
+                    PetConfigHolder.bumpImageRevision()
+                } else {
+                    host.log("换图失败：图片无法解码（可能是格式不支持或文件已损坏）")
+                }
+            }
+        }
+    }
+    return { runCatching { launcher.launch("image/*") } }
+}
 
 class DesktopPetExtension : DshExtension {
 
@@ -140,6 +176,7 @@ private fun GlobalPetContent(host: DshExtensionHost, modifier: Modifier) {
 
     // 悬浮窗只包住桌宠本身：Box 不 fillMaxSize，让 WRAP_CONTENT 生效。
     Box(modifier) {
+        val pickImage = rememberPetImagePicker(host)
         DesktopPet(
             config = config,
             bubble = bubble,
@@ -147,6 +184,7 @@ private fun GlobalPetContent(host: DshExtensionHost, modifier: Modifier) {
                 bubble = lexicon.pick(scene) ?: scene.label
             },
             modifier = Modifier,
+            onChangeImage = pickImage,
         )
     }
 }

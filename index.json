@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/DSH-Folk/dsh-folk-plugins",
-  "generatedAt": "2026-11-26T06:45:07Z",
+  "generatedAt": "2026-11-26T14:45:36Z",
   "extensions": [
     {
       "id": "dsh-browser-bridge",
@@ -36,17 +36,17 @@
     {
       "id": "dsh-desktop-pet",
       "name": "桌宠",
-      "version": "1.1.1",
-      "description": "住在 DSH-Folk 里的桌宠：可拖动、可互动，会跟着容器状态说话。显示位置三档可选（仅网页内 / 仅应用内 / 全局悬浮窗），支持换图、调透明度、导入自己的词库，也能接独立 AI 接口聊天。",
+      "version": "1.2.0",
+      "description": "住在 DSH-Folk 里的桌宠：可拖动、可互动，会跟着容器状态说话。内嵌默认立绘，支持换图（自动缩放并保留透明通道）与恢复默认。显示位置三档可选（仅网页内 / 仅应用内 / 全局悬浮窗），可调透明度、导入自己的词库，也能接独立 AI 接口聊天。",
       "author": "DSH-Folk",
       "declaredCaps": [
         "ui.slot",
         "ui.config"
       ],
       "minApi": 1,
-      "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-desktop-pet-v1.1.1/dsh-desktop-pet-1.1.1.dshx",
-      "sha256": "26b8b1f1904bb515be27bb4060a206ae173dcfd1310ab07d7ec40db24abc3acc",
-      "sizeBytes": 69650
+      "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-desktop-pet-v1.2.0/dsh-desktop-pet-1.2.0.dshx",
+      "sha256": "",
+      "sizeBytes": 0
     }
   ]
 }

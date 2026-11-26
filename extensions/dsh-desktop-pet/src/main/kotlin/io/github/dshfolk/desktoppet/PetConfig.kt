@@ -180,6 +180,25 @@ object PetConfigHolder {
      */
     private val state = androidx.compose.runtime.mutableStateOf<PetConfig?>(null)
 
+    /**
+     * 换图/恢复默认的版本号。
+     *
+     * ## 为什么需要它
+     *
+     * 图片不在 [PetConfig] 里（它是文件，不是配置值），所以换图不会触发配置 state 变化。
+     * 而桌宠那边用 `remember(file, ...)` 缓存解码结果 —— 键不变就不会重新读文件，
+     * 用户换完图界面上还是旧图，必须重启。
+     *
+     * 自增这个值并让 `remember` 把它作为键之一，就能精确地让"图变了"触发重载，
+     * 而其它配置变化（透明度之类）不会白解一次图。
+     */
+    private val imageRev = androidx.compose.runtime.mutableIntStateOf(0)
+
+    val imageRevision: Int get() = imageRev.intValue
+
+    /** 图片变了（换图或恢复默认）时调用。 */
+    fun bumpImageRevision() { imageRev.intValue++ }
+
     fun attach(host: DshExtensionHost) {
         if (store == null) store = PetConfigStore(host)
         if (this.host == null) this.host = host

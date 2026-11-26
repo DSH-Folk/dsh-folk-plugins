@@ -53,4 +53,8 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.lifecycle.runtime.compose)
+
+    // rememberLauncherForActivityResult / ActivityResultContracts：
+    // 换图要拉起系统图片选择器，这是唯一不需要存储权限的做法。
+    implementation(libs.androidx.activity.compose)
 }
