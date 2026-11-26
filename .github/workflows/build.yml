@@ -30,7 +30,7 @@ jobs:
         # 每加一个扩展：在 settings.gradle.kts 里 include、在 index.json 里登记、
         # 在这里加一行。三处都要，缺任何一处都会让"市场里有、但构建不出来"
         # 或者"构建出来了、但市场里没有"。
-        id: [dsh-browser-bridge, dsh-minimal-shell]
+        id: [dsh-browser-bridge, dsh-minimal-shell, dsh-desktop-pet]
     steps:
       - name: 检出本仓库
         uses: actions/checkout@v4
