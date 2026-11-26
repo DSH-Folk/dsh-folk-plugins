@@ -264,9 +264,12 @@ jobs:
           git config user.name "dsh-folk-ci"
           git config user.email "dsh-folk-ci@users.noreply.github.com"
 
-          # 先 rebase 到远端：进到这一步时远端可能已经被别的 matrix job 推进过了。
-          git fetch origin main
-          git rebase origin/main || git rebase --abort
+          # 先同步到远端最新：进到这一步时远端可能已经被别的 matrix job 推进过了。
+          #
+          # 用 pull --rebase 而不是 fetch + rebase：checkout@v4 在 PR 上是 detached HEAD，
+          # 裸 `git rebase origin/main` 在那里会因为"当前不在任何分支上"而失败。
+          # pull --rebase 自己处理这种状态。
+          git pull --rebase origin main || { echo "::error::无法 rebase 到远端"; exit 1; }
 
           # rebase 会重新应用我们的改动，也可能把"别人的改动 + 我们的改动"合到一起；
           # 重新跑一次 jq 保证自己这条记录是最新的（rebase 后工作树里的值可能被覆盖）。
@@ -295,8 +298,7 @@ jobs:
               exit 0
             fi
             echo "push 被拒，第 $i 次重试…"
-            git fetch origin main
-            git rebase origin/main || { git rebase --abort; exit 1; }
+            git pull --rebase origin main || { git rebase --abort; exit 1; }
           done
           echo "::error::index.json 推送连续失败 5 次"
           exit 1

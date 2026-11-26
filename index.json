@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/DSH-Folk/dsh-folk-plugins",
-  "generatedAt": "2026-11-26T03:29:21Z",
+  "generatedAt": "2026-11-26T03:36:28Z",
   "extensions": [
     {
       "id": "dsh-browser-bridge",
@@ -45,8 +45,8 @@
       ],
       "minApi": 1,
       "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-desktop-pet-v1.0.0/dsh-desktop-pet-1.0.0.dshx",
-      "sha256": "",
-      "sizeBytes": 0
+      "sha256": "10db7deece1e89295565aacb13e8373bcb9ab8ba4d7fe16019e73676d948a5cf",
+      "sizeBytes": 62999
     }
   ]
 }
