@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/DSH-Folk/dsh-folk-plugins",
-  "generatedAt": "2026-11-26T03:43:50Z",
+  "generatedAt": "2026-11-26T03:48:42Z",
   "extensions": [
     {
       "id": "dsh-browser-bridge",
@@ -15,7 +15,7 @@
       ],
       "minApi": 1,
       "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-browser-bridge-v1.2.0/dsh-browser-bridge-1.2.0.dshx",
-      "sha256": "7760e5e7c2f6da836ee588f8bd95a917f40f1e28b9ea447db22d963eb545a9e3",
+      "sha256": "1f008427c59bd335a8f0b0cdd1fc6215419c81d4ffd9b269b6359d3cde9a3f3b",
       "sizeBytes": 8257
     },
     {
@@ -30,7 +30,7 @@
       ],
       "minApi": 1,
       "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-minimal-shell-v1.0.0/dsh-minimal-shell-1.0.0.dshx",
-      "sha256": "9e87f7788adb015fb7441a0153c903f9cc586b02ebef8ddf032ccbc999bf7be5",
+      "sha256": "d1f370d9501ce7162a019befe23ef886d0c3b3cd054670a5a6d5d609d3ee75c7",
       "sizeBytes": 59664
     },
     {
@@ -45,7 +45,7 @@
       ],
       "minApi": 1,
       "downloadUrl": "https://github.com/DSH-Folk/dsh-folk-plugins/releases/download/ext-dsh-desktop-pet-v1.0.0/dsh-desktop-pet-1.0.0.dshx",
-      "sha256": "10db7deece1e89295565aacb13e8373bcb9ab8ba4d7fe16019e73676d948a5cf",
+      "sha256": "316be593cc8790d942dfa07ec5512f7371238bd03c988983053f3e7d810ab9e3",
       "sizeBytes": 62999
     }
   ]
