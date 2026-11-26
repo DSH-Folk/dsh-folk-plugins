@@ -264,17 +264,26 @@ jobs:
           git config user.name "dsh-folk-ci"
           git config user.email "dsh-folk-ci@users.noreply.github.com"
 
-          # 顺序很重要：**先**同步远端，**再**改文件。
+          # 同步到远端最新。
           #
-          # 反过来（先改再 pull --rebase）会直接失败：pull --rebase 要求工作树干净，
-          # 而那时 index.json 已经被 jq 改过 —— CI 报的是
-          # `error: cannot pull with rebase: You have unstaged changes.`
+          # ## 为什么不能直接 pull --rebase
           #
-          # 用 pull --rebase 而不是 fetch + rebase：checkout@v4 在 PR 上是 detached HEAD，
-          # 裸 `git rebase origin/main` 在那里会因"当前不在任何分支上"失败。
+          # **上一步（回填 index.json）已经改过工作树里的文件了** —— 这一步开始时
+          # index.json 就是"未提交的改动"状态。而 pull --rebase 要求工作树干净，
+          # 于是直接失败：
+          #   error: cannot pull with rebase: You have unstaged changes.
+          #
+          # 这个坑很难从脚本上看出来：注释写"先 pull 再改文件"是对的，但**上一步**
+          # 已经改过了，本步的"先"并不成立。
+          #
+          # 正确做法：stash 掉现有改动 → pull → pop 回来。pop 可能冲突，但每个 job
+          # 只改自己那一条记录（jq 里 map + if .id == $n），冲突不会发生。
+          git stash push --include-untracked -m "ci-index-backfill" >/dev/null 2>&1 || true
           git pull --rebase origin main || { echo "::error::无法同步到远端"; exit 1; }
+          git stash pop >/dev/null 2>&1 || true
 
-          # 现在工作树是最新的，可以安全改文件。
+          # 现在工作树是最新的，重新跑一次 jq 保证自己这条记录是最新的
+          # （stash pop 之后值可能被别人的版本覆盖）。
           jq --arg n "$NAME" --arg v "$VERSION" --arg sha "$SHA" --arg url "$URL" \
              --arg now "$NOW" --argjson size "$SIZE" '
             .generatedAt = $now
