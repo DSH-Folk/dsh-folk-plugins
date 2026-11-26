@@ -235,15 +235,68 @@ jobs:
           mv index.json.tmp index.json
           cat index.json
 
+      # 回填 index.json 并推回 main。
+      #
+      # ## 为什么必须重试
+      #
+      # matrix 里每个扩展是一个独立 job，它们**并发**跑完、各自回填同一个 index.json
+      # 再 git push。三个 job 同时 push 时，只有第一个成功，其余被拒（fetch first）——
+      # 而那时编译、打包、发 Release 全都已经成功，只有最后这一下失败。
+      #
+      # 表现为：产物在 Release 页面能看到，但 index.json 里 sha256 还是空的，
+      # 应用内的扩展市场因此装不上。排查时容易误以为是编译问题（job 是红的）。
+      #
+      # 修法：push 前先 rebase 到远端最新，失败就重试。因为每个 job 只改**自己那一条**
+      # 扩展记录（jq 里是 map + if .id == $n），rebase 不会冲突。
       - name: 提交 index.json 回 main
+        # 这些值必须重新声明：上一步的 env 不会跨步骤保留，直接用会展开成空字符串
+        # （那会让 jq 把 sha256 写成 ""，而 push 却"成功"了 —— 最难发现的那种坏）。
+        env:
+          NAME: ${{ steps.pack.outputs.name }}
+          VERSION: ${{ steps.pack.outputs.version }}
+          SHA: ${{ steps.pack.outputs.sha }}
+          SIZE: ${{ steps.pack.outputs.size }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          URL="https://github.com/$REPO/releases/download/ext-$NAME-v$VERSION/$NAME-$VERSION.dshx"
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           git config user.name "dsh-folk-ci"
           git config user.email "dsh-folk-ci@users.noreply.github.com"
+
+          # 先 rebase 到远端：进到这一步时远端可能已经被别的 matrix job 推进过了。
+          git fetch origin main
+          git rebase origin/main || git rebase --abort
+
+          # rebase 会重新应用我们的改动，也可能把"别人的改动 + 我们的改动"合到一起；
+          # 重新跑一次 jq 保证自己这条记录是最新的（rebase 后工作树里的值可能被覆盖）。
+          jq --arg n "$NAME" --arg v "$VERSION" --arg sha "$SHA" --arg url "$URL" \
+             --arg now "$NOW" --argjson size "$SIZE" '
+            .generatedAt = $now
+            | .extensions |= map(
+                if .id == $n then
+                  .version = $v | .sha256 = $sha | .downloadUrl = $url | .sizeBytes = $size
+                else . end
+              )
+          ' index.json > index.json.tmp
+          mv index.json.tmp index.json
+
           if git diff --quiet -- index.json; then
             echo "index.json 无变化，跳过提交"
             exit 0
           fi
           git add index.json
-          git commit -m "chore(index): 回填 ${{ steps.pack.outputs.name }} v${{ steps.pack.outputs.version }} [skip ci]"
-          git push
+          git commit -m "chore(index): 回填 $NAME v$VERSION [skip ci]"
+
+          # 重试 push：rebase 与 push 之间仍可能被抢先，重试几次就够了。
+          for i in 1 2 3 4 5; do
+            if git push; then
+              echo "已推送（第 $i 次）"
+              exit 0
+            fi
+            echo "push 被拒，第 $i 次重试…"
+            git fetch origin main
+            git rebase origin/main || { git rebase --abort; exit 1; }
+          done
+          echo "::error::index.json 推送连续失败 5 次"
+          exit 1

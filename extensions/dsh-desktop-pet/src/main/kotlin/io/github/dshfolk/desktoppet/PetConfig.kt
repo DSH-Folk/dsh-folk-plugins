@@ -1,6 +1,5 @@
 package io.github.dshfolk.desktoppet
 
-import android.content.Context
 import android.content.SharedPreferences
 import me.bmax.apatch.dsh.ext.DshExtensionHost
 import java.io.File
@@ -76,9 +75,9 @@ data class PetConfig(
  */
 class PetConfigStore(private val host: DshExtensionHost) {
 
-    private val prefs: SharedPreferences? = runCatching {
-        host.appContext.getSharedPreferences("dsh_desktop_pet", Context.MODE_PRIVATE)
-    }.getOrNull()
+    // 用 fs.prefs() 而不是自己 getSharedPreferences：宿主会加扩展前缀，
+    // 免得和别的扩展撞名（两个扩展都用 "config" 就会互相覆盖）。
+    private val prefs: SharedPreferences? = runCatching { host.fs.prefs("pet") }.getOrNull()
 
     fun load(): PetConfig {
         val p = prefs ?: return PetConfig()
@@ -121,10 +120,10 @@ class PetConfigStore(private val host: DshExtensionHost) {
         }
 
     /** 用户自定义词库文件（在扩展私有目录里）。 */
-    fun lexiconFile(): File = File(host.fs.extensionDir, "lexicon.json")
+    fun lexiconFile(): File = File(host.fs.ownDir, "lexicon.json")
 
     /** 自定义图（用户选过的 PNG/GIF 会被拷到这里）。 */
-    fun petImageFile(): File = File(host.fs.extensionDir, "pet.png")
+    fun petImageFile(): File = File(host.fs.ownDir, "pet.png")
 
     private companion object {
         const val KEY_DISPLAY = "display"
