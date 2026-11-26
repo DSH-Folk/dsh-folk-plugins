@@ -264,15 +264,17 @@ jobs:
           git config user.name "dsh-folk-ci"
           git config user.email "dsh-folk-ci@users.noreply.github.com"
 
-          # 先同步到远端最新：进到这一步时远端可能已经被别的 matrix job 推进过了。
+          # 顺序很重要：**先**同步远端，**再**改文件。
+          #
+          # 反过来（先改再 pull --rebase）会直接失败：pull --rebase 要求工作树干净，
+          # 而那时 index.json 已经被 jq 改过 —— CI 报的是
+          # `error: cannot pull with rebase: You have unstaged changes.`
           #
           # 用 pull --rebase 而不是 fetch + rebase：checkout@v4 在 PR 上是 detached HEAD，
-          # 裸 `git rebase origin/main` 在那里会因为"当前不在任何分支上"而失败。
-          # pull --rebase 自己处理这种状态。
-          git pull --rebase origin main || { echo "::error::无法 rebase 到远端"; exit 1; }
+          # 裸 `git rebase origin/main` 在那里会因"当前不在任何分支上"失败。
+          git pull --rebase origin main || { echo "::error::无法同步到远端"; exit 1; }
 
-          # rebase 会重新应用我们的改动，也可能把"别人的改动 + 我们的改动"合到一起；
-          # 重新跑一次 jq 保证自己这条记录是最新的（rebase 后工作树里的值可能被覆盖）。
+          # 现在工作树是最新的，可以安全改文件。
           jq --arg n "$NAME" --arg v "$VERSION" --arg sha "$SHA" --arg url "$URL" \
              --arg now "$NOW" --argjson size "$SIZE" '
             .generatedAt = $now
@@ -291,7 +293,8 @@ jobs:
           git add index.json
           git commit -m "chore(index): 回填 $NAME v$VERSION [skip ci]"
 
-          # 重试 push：rebase 与 push 之间仍可能被抢先，重试几次就够了。
+          # 重试 push：提交与 push 之间仍可能被别的 matrix job 抢先。
+          # 被拒时先 pull --rebase（此时工作树是干净的：改动已 commit），再重试。
           for i in 1 2 3 4 5; do
             if git push; then
               echo "已推送（第 $i 次）"
