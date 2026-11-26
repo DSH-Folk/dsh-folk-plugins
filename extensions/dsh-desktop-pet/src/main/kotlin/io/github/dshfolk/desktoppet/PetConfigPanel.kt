@@ -43,7 +43,9 @@ import androidx.compose.ui.unit.sp
  * 不是为了防谁，而是避免它出现在截屏里 —— 用户报障时经常截图设置页。
  */
 @Composable
-fun PetConfigPanel() {
+fun PetConfigPanel(
+    onDisplayChanged: (PetDisplay) -> Unit = {},
+) {
     var config by remember { mutableStateOf(PetConfigHolder.read()) }
     val store = PetConfigHolder.store()
     var apiKey by remember { mutableStateOf(store?.apiKey.orEmpty()) }
@@ -61,15 +63,47 @@ fun PetConfigPanel() {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ChoiceChip("仅网页内", config.display == PetDisplay.WEBUI) {
                 persist(config.copy(display = PetDisplay.WEBUI))
+                onDisplayChanged(PetDisplay.WEBUI)
             }
             ChoiceChip("仅应用内", config.display == PetDisplay.HOST) {
                 persist(config.copy(display = PetDisplay.HOST))
+                onDisplayChanged(PetDisplay.HOST)
             }
             ChoiceChip("全局悬浮窗", config.display == PetDisplay.OVERLAY) {
                 persist(config.copy(display = PetDisplay.OVERLAY))
+                onDisplayChanged(PetDisplay.OVERLAY)
             }
         }
-        Hint("「全局悬浮窗」需要系统悬浮窗权限，可在系统设置里给本应用授权。")
+
+        // 选了全局悬浮窗但没授权时，给一个直达系统设置页的按钮。
+        //
+        // 这个权限**不能**用运行时权限弹窗申请（它不是 dangerous permission），
+        // 只能跳设置页。不给这个按钮的话，用户只知道"要授权"，却找不到在哪。
+        if (config.display == PetDisplay.OVERLAY) {
+            val ui = PetConfigHolder.uiSeam()
+            val granted = ui?.hasOverlayPermission() == true
+            if (granted) {
+                Hint("已获得悬浮窗权限。桌宠会盖在任何应用上面。")
+            } else {
+                Hint("还没有「显示在其他应用上层」权限，桌宠暂时不会出现在桌面。")
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable { ui?.openOverlaySettings() }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        "去授权",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                }
+            }
+        } else {
+            Hint("「仅网页内」只在 dsh 页面里出现；「仅应用内」在本应用任何界面都能看到；「全局悬浮窗」能盖在别的应用上。")
+        }
 
         Spacer(Modifier.height(14.dp))
 

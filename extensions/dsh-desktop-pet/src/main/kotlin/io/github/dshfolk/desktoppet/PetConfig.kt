@@ -6,13 +6,27 @@ import java.io.File
 
 /** 显示位置。 */
 enum class PetDisplay {
-    /** 只在 dsh 网页里浮动（免悬浮窗权限）。 */
+    /**
+     * 只在 dsh 网页里浮动（`Slot.WEBUI_OVERLAY`）。
+     *
+     * 不需要任何权限，装上就能用。代价是只在 dsh 页面内可见。
+     */
     WEBUI,
 
-    /** 只在宿主 App 的界面里浮动。 */
+    /**
+     * 在宿主 App 的任何界面里浮动（`Slot.HOME_CARD` 之外的自绘层）。
+     *
+     * 同样不需要悬浮窗权限 —— 它画在宿主自己的窗口里。比 WEBUI 宽一些
+     * （终端页、设置页都能看到），但切到别的 App 就看不见了。
+     */
     HOST,
 
-    /** 全局系统悬浮窗（要 SYSTEM_ALERT_WINDOW，能盖在别的 App 上）。 */
+    /**
+     * 全局系统悬浮窗（`TYPE_APPLICATION_OVERLAY`），能盖在任何应用上面。
+     *
+     * 需要「显示在其他应用上层」权限。宿主负责挂载与摘除（见 `:ext-api` 的
+     * `UiSeam.showGlobalOverlay`），扩展不用起 Service、不用挂通知。
+     */
     OVERLAY;
 
     companion object {
@@ -145,10 +159,24 @@ class PetConfigStore(private val host: DshExtensionHost) {
 object PetConfigHolder {
     private var store: PetConfigStore? = null
     private var cached: PetConfig? = null
+    private var host: DshExtensionHost? = null
 
     fun attach(host: DshExtensionHost) {
         if (store == null) store = PetConfigStore(host)
+        if (this.host == null) this.host = host
     }
+
+    /**
+     * 宿主能力入口。
+     *
+     * 配置面板需要它查悬浮窗权限、跳系统设置页 —— 但面板是宿主渲染的纯 Composable，
+     * 拿不到 `DshExtensionHost` 参数。这里留一个入口，面板通过它拿到 seam。
+     */
+    fun uiSeam(): me.bmax.apatch.dsh.ext.seam.UiSeam? =
+        runCatching { host?.seam?.ui }.getOrNull()
+
+    /** 宿主句柄（配置面板改完显示档位后要重新挂载悬浮窗）。 */
+    fun extensionHost(): DshExtensionHost? = host
 
     fun store(): PetConfigStore? = store
 
